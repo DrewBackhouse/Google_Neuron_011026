@@ -1,3 +1,4 @@
+import sys
 import time
 import numpy as np
 import cirq
@@ -6,9 +7,10 @@ import qsimcirq
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from qutip import basis, tensor, mesolve, expect, fock
 
-from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, UnaryPostSelection
+from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, PlotQubitEmbedding, UnaryPostSelection
 
 #---Model Parameters---#
 
@@ -20,10 +22,10 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 20
-Timesteps_List = list(range(10, 101))     # Test run; full scan is range(10, 101)
+Total_time = 15
+Timesteps_List = list(range(15, 36))
 Number_of_Shots = 2000
-Noise = False
+Noise = True
 print(f'Noise = {Noise}')
 
 #---Qutip Sim (independent of Timesteps since Total_time is fixed)---#
@@ -53,6 +55,27 @@ if Noise == True:
 else:
     simulator = cirq.Simulator()
 
+#---Qubit mapping (computed once; interaction graph is independent of Trotter time)---#
+
+if Noise == True:
+    Ref_circuit, qubits = TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Total_time/Timesteps_List[0], Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
+    Willow_qubits = MapQubitsToDevice(qubits, Ref_circuit, device, cal)
+    Qubit_Map = dict(zip(qubits, Willow_qubits))
+    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Ref_circuit.transform_qubits(Qubit_Map), Number_of_Fock_States, Number_of_Bosonic_Modes)
+    Mapping_fig.savefig('Qubit_Mapping.png', dpi=80)
+
+    print('Qubit mapping:')
+    for k, (q, w) in enumerate(Qubit_Map.items()):
+        if k < Number_of_Bosonic_Modes*Number_of_Fock_States:
+            role = f'boson {k//Number_of_Fock_States}, Fock {k%Number_of_Fock_States}'
+        else:
+            role = f'spin {k-Number_of_Bosonic_Modes*Number_of_Fock_States}'
+        print(f'  {q} [{role}] -> {w}')
+    print('Mapping plot saved to Qubit_Mapping.png')
+    if input('Proceed with this mapping? [y/N] ').strip().lower() not in ('y', 'yes'):
+        print('Aborted')
+        sys.exit()
+
 #---Scan over Timesteps---#
 
 Scan_Results = []
@@ -62,8 +85,7 @@ for Timesteps in Timesteps_List:
 
     Trotter_circuit, qubits = TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
     if Noise == True:
-        Willow_qubits = MapQubitsToDevice(qubits, Trotter_circuit, device, cal)
-        Trotter_circuit = Trotter_circuit.transform_qubits(dict(zip(qubits, Willow_qubits)))
+        Trotter_circuit = Trotter_circuit.transform_qubits(Qubit_Map)
         qubits = Willow_qubits
     Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
 
@@ -113,8 +135,12 @@ for r, (Timesteps, Time, Time_Data, All_Results) in enumerate(Scan_Results):
     ax_s.legend(loc='upper right')
 axes[-1,0].set_xlabel('Time')
 axes[-1,1].set_xlabel('Time')
-fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Total_time}, Shots={Number_of_Shots}, Noise = {Noise}, postselection')
-fig.tight_layout(rect=(0, 0, 1, 1 - 0.3/(2.8*Rows)))
-fig.savefig('Timestep_Scan.png', dpi=80)
-fig.savefig('Timestep_Scan.pdf')
-print('Saved Timestep_Scan.png and Timestep_Scan.pdf')
+Fig_Height = 2.8*Rows     # inches; keep the suptitle a fixed distance from the top regardless of row count
+fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Total_time}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
+fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
+# fig.savefig('Timestep_Scan.png', dpi=80)
+with PdfPages('Timestep_Scan.pdf') as pdf:
+    if Noise == True:
+        pdf.savefig(Mapping_fig)
+    pdf.savefig(fig)
+print('Saved Timestep_Scan.pdf')

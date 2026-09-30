@@ -3,13 +3,14 @@ import cirq
 import cirq_google
 import qsimcirq
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from qutip import about, basis, tensor, destroy, mcsolve, mesolve, expect, qeye, sigmax, sigmay, sigmaz, fock, wigner, coherent
 
 from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, PlotQubitEmbedding, UnaryPostSelection, TrotterStepCZ_New
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 8
+Number_of_Fock_States = 6
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1 # Independnet of the physics (as far as I am aware, at least when it is global)
 Spin_Interaction_Coefficent = 0.1
@@ -17,12 +18,13 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-# Time= np.pi/(2*Displacement_Coefficent*(Number_of_Fock_States-0.5)**0.5) # Trotter step time s.t. the controlled RZ gate becomes a CZ
-Total_time = 20
-Timesteps=10
-Time = Total_time/Timesteps
+Time= np.pi/(2*Displacement_Coefficent*(Number_of_Fock_States-0.5)**0.5) # Trotter step time s.t. the controlled RZ gate becomes a CZ
+print(Time)
+Timesteps=18
+# Total_time = 20
+# Time = Total_time/Timesteps
 Number_of_Shots = 2000
-Noise = False
+Noise = True
 print(f'Noise = {Noise}')
 
 #---Qutip Sim---#
@@ -55,13 +57,13 @@ else:
 
 #---Trotter step circuit preperation---#
 
-Trotter_circuit, qubits = TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
+Trotter_circuit, qubits = TrotterStepCZ_New(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
 print('Trotter step circuit')
 print(Trotter_circuit)
 if Noise == True:
     Willow_qubits = MapQubitsToDevice(qubits, Trotter_circuit, device, cal)
     Trotter_circuit = Trotter_circuit.transform_qubits(dict(zip(qubits, Willow_qubits)))
-    PlotQubitEmbedding(cal, Willow_qubits, Trotter_circuit, Number_of_Fock_States, Number_of_Bosonic_Modes)
+    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Trotter_circuit, Number_of_Fock_States, Number_of_Bosonic_Modes)
     qubits = Willow_qubits
 Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
 print('Trotter step circuit mapped to native gates')
@@ -96,22 +98,29 @@ Time_Data = np.linspace(Time, Time*Timesteps, Timesteps)
 
 #---Plots---#
 
-plt.figure()
+Fig_Height = 4.0     # inches; gives the same axes height as a row of the timestep scan (suptitle/xlabel overhead ~1.9in)
+fig, (ax_b, ax_s) = plt.subplots(1, 2, figsize=(12, Fig_Height))
 for i in range(Number_of_Bosonic_Modes):
-    plt.plot(Qutip_Time_Data, exp_n[i])
-    plt.scatter(Time_Data, All_Results[:,i], label = f'Mode {i}')
-plt.legend()
-plt.title(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Trotter time ={Time:.2f}, Shots={Number_of_Shots}, Noise = {Noise}, postselection')
-plt.ylabel('Average Bosonic occupation number')
-plt.xlabel('Time')
-
-plt.figure()
-for i in range(Number_of_Bosonic_Modes):
-    plt.plot(Qutip_Time_Data, -(exp_sz[i]-1)/2)
-    plt.scatter(Time_Data, All_Results[:,i+Number_of_Bosonic_Modes], label = f'Spin {i}')
-plt.legend()
-plt.title(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Trotter time ={Time:.2f}, Shots={Number_of_Shots}, Noise = {Noise}, postselection')
-plt.ylabel('Average Spin state')
-plt.xlabel('Time')
+    ax_b.plot(Qutip_Time_Data, exp_n[i])
+    ax_b.scatter(Time_Data, All_Results[:,i], s=12, label=f'Mode {i}')
+    ax_s.plot(Qutip_Time_Data, -(exp_sz[i]-1)/2)
+    ax_s.scatter(Time_Data, All_Results[:,i+Number_of_Bosonic_Modes], s=12, label=f'Spin {i}')
+ax_b.set_title(f'Timesteps={Timesteps}, Trotter time={Time:.3f}')
+ax_s.set_title(f'Timesteps={Timesteps}, Trotter time={Time:.3f}')
+ax_b.set_ylabel('Avg boson occupation')
+ax_s.set_ylabel('Avg spin state')
+ax_b.set_xlabel('Time')
+ax_s.set_xlabel('Time')
+ax_b.set_ylim(-0.2, Number_of_Fock_States-0.8)
+ax_s.set_ylim(-0.05, 1.05)
+ax_b.legend(loc='upper right')
+ax_s.legend(loc='upper right')
+fig.suptitle(f'CZ spin-boson interaction, N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Time*Timesteps:.2f}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
+fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
+with PdfPages('CRZ_Noisy.pdf') as pdf:
+    if Noise == True:
+        pdf.savefig(Mapping_fig)
+    pdf.savefig(fig)
+print('Saved CRZ_Noisy.pdf')
 
 plt.show()

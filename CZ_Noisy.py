@@ -10,7 +10,7 @@ from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, PlotQ
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 6
+Number_of_Fock_States = 10
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1 # Independnet of the physics (as far as I am aware, at least when it is global)
 Spin_Interaction_Coefficent = 0.1
@@ -19,10 +19,8 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 #---Simulation Parameters---#
 
 Time= np.pi/(2*Displacement_Coefficent*(Number_of_Fock_States-0.5)**0.5) # Trotter step time s.t. the controlled RZ gate becomes a CZ
+Timesteps=30
 print(Time)
-Timesteps=18
-# Total_time = 20
-# Time = Total_time/Timesteps
 Number_of_Shots = 2000
 Noise = True
 print(f'Noise = {Noise}')
@@ -117,10 +115,8 @@ ax_b.legend(loc='upper right')
 ax_s.legend(loc='upper right')
 fig.suptitle(f'CZ spin-boson interaction, N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Time*Timesteps:.2f}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
 fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
-with PdfPages('CRZ_Noisy.pdf') as pdf:
+with PdfPages(f'N{Number_of_Fock_States} CZ_Noisy.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
     pdf.savefig(fig)
-print('Saved CRZ_Noisy.pdf')
-
-plt.show()
+print(f'Saved N{Number_of_Fock_States} CZ_Noisy.pdf')

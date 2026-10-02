@@ -82,6 +82,7 @@ def TrotterStepCZ_New(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Disp
 
     for j in range (Number_of_Bosonic_Modes):
          Trotter_circuit.append(cirq.CZ(qubits[(j+1)*Number_of_Fock_States-1],qubits[Number_of_Fock_States*Number_of_Bosonic_Modes+j]))
+         Trotter_circuit.append(cirq.Z(qubits[(j+1)*Number_of_Fock_States-1])**-0.5)     # CZ * S^dagger(control) == controlled rz(pi)
 
     return Trotter_circuit, qubits
 

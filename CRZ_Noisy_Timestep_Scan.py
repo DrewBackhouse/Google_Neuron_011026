@@ -14,7 +14,7 @@ from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, PlotQ
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 8
+Number_of_Fock_States = 10
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1
 Spin_Interaction_Coefficent = 0.1
@@ -22,8 +22,8 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 15
-Timesteps_List = list(range(15, 36))
+Total_time = 16
+Timesteps_List = list(range(20, 40))
 Number_of_Shots = 2000
 Noise = True
 print(f'Noise = {Noise}')
@@ -139,8 +139,8 @@ Fig_Height = 2.8*Rows     # inches; keep the suptitle a fixed distance from the 
 fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Total_time}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
 fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
 # fig.savefig('Timestep_Scan.png', dpi=80)
-with PdfPages('Timestep_Scan.pdf') as pdf:
+with PdfPages(f'N{Number_of_Fock_States} CRZ_Noisy_Timestep_Scan.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
     pdf.savefig(fig)
-print('Saved Timestep_Scan.pdf')
+print(f'Saved N{Number_of_Fock_States} CRZ_Noisy_Timestep_Scan.pdf')

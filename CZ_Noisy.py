@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import cirq
 import cirq_google
@@ -6,11 +7,11 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from qutip import about, basis, tensor, destroy, mcsolve, mesolve, expect, qeye, sigmax, sigmay, sigmaz, fock, wigner, coherent
 
-from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, PlotQubitEmbedding, UnaryPostSelection, TrotterStepCZ_New
+from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection, TrotterStepCZ_New
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 10
+Number_of_Fock_States = 8
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1 # Independnet of the physics (as far as I am aware, at least when it is global)
 Spin_Interaction_Coefficent = 0.1
@@ -19,11 +20,21 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 #---Simulation Parameters---#
 
 Time= np.pi/(2*Displacement_Coefficent*(Number_of_Fock_States-0.5)**0.5) # Trotter step time s.t. the controlled RZ gate becomes a CZ
-Timesteps=30
+Timesteps=22
 print(Time)
 Number_of_Shots = 2000
 Noise = True
 print(f'Noise = {Noise}')
+Simulation_Approval = True
+
+#---Qubit mapping---#
+
+Automatic_Qubit_Mapping = True
+Manual_Qubit_Mapping = [cirq.GridQubit(6, 1), cirq.GridQubit(6, 2), cirq.GridQubit(5, 2), cirq.GridQubit(4, 2), cirq.GridQubit(4, 3), cirq.GridQubit(3, 3), cirq.GridQubit(3, 4), cirq.GridQubit(4, 4), cirq.GridQubit(5, 4)] # Used if Automatic_Qubit_Mapping = False. Boson qubits (mode by mode, Fock 0..N-1) then spin qubits
+Boson_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 1.0, 'coherent': 1.0}  # Used if Automatic_Qubit_Mapping = True
+Spin_Weights = {'T1': 1.0, 'Tphi': 5.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 1.0, 'coherent': 1.0}   # Spin weights also apply to the spin-boson couplers
+print(f'Automatic_Qubit_Mapping = {Automatic_Qubit_Mapping}')
+
 
 #---Qutip Sim---#
 
@@ -59,15 +70,25 @@ Trotter_circuit, qubits = TrotterStepCZ_New(Number_of_Fock_States, Number_of_Bos
 print('Trotter step circuit')
 print(Trotter_circuit)
 if Noise == True:
-    Willow_qubits = MapQubitsToDevice(qubits, Trotter_circuit, device, cal)
+    if Automatic_Qubit_Mapping == True:
+        Willow_qubits = MapQubitsToDevice(qubits, Trotter_circuit, device, cal, qubits[Number_of_Bosonic_Modes*Number_of_Fock_States:], noise_props=noise_props, boson_weights=Boson_Weights, spin_weights=Spin_Weights)
+    else:
+        if len(Manual_Qubit_Mapping) != len(qubits):
+            raise ValueError(f'Manual_Qubit_Mapping has {len(Manual_Qubit_Mapping)} qubits, circuit needs {len(qubits)}')
+        Willow_qubits = Manual_Qubit_Mapping
     Trotter_circuit = Trotter_circuit.transform_qubits(dict(zip(qubits, Willow_qubits)))
-    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Trotter_circuit, Number_of_Fock_States, Number_of_Bosonic_Modes)
+    CheckQubitMapping(Willow_qubits, Trotter_circuit, device)
+    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Trotter_circuit, Number_of_Fock_States, Number_of_Bosonic_Modes, noise_props=noise_props)
+    Mapping_fig.savefig('Output/Qubit_Mapping.png', dpi=80)
     qubits = Willow_qubits
 Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
 print('Trotter step circuit mapped to native gates')
 print(Trotter_circuit.to_text_diagram(qubit_order=qubits))
 
-input('Press enter to continue to simulation...')
+if Simulation_Approval == True:
+    if input('Proceed with this mapping? [y/N] ').strip().lower() not in ('y', 'yes'):
+            print('Aborted')
+            sys.exit()
 
 #---Cirq Sim---#
 
@@ -115,8 +136,8 @@ ax_b.legend(loc='upper right')
 ax_s.legend(loc='upper right')
 fig.suptitle(f'CZ spin-boson interaction, N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Time*Timesteps:.2f}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
 fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
-with PdfPages(f'N{Number_of_Fock_States} CZ_Noisy.pdf') as pdf:
+with PdfPages(f'Output/CZ_N{Number_of_Fock_States}_T{Timesteps}_Noise{Noise}.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
     pdf.savefig(fig)
-print(f'Saved N{Number_of_Fock_States} CZ_Noisy.pdf')
+print(f'Saved CZ_N{Number_of_Fock_States}_T{Timesteps}_Noise{Noise}.pdf')

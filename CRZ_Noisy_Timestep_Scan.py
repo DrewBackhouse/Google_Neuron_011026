@@ -10,11 +10,11 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from qutip import basis, tensor, mesolve, expect, fock
 
-from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, PlotQubitEmbedding, UnaryPostSelection
+from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 10
+Number_of_Fock_States = 8
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1
 Spin_Interaction_Coefficent = 0.1
@@ -22,11 +22,21 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 16
-Timesteps_List = list(range(20, 40))
+Total_time = 15
+Timesteps_List = list(range(26, 27))
 Number_of_Shots = 2000
-Noise = True
+Noise = False
 print(f'Noise = {Noise}')
+Simulation_Approval = True
+
+#---Qubit mapping---#
+
+Automatic_Qubit_Mapping = False
+Manual_Qubit_Mapping = [cirq.GridQubit(6, 1), cirq.GridQubit(6, 2), cirq.GridQubit(5, 2), cirq.GridQubit(4, 2), cirq.GridQubit(4, 3), cirq.GridQubit(3, 3), cirq.GridQubit(3, 4), cirq.GridQubit(4, 4), cirq.GridQubit(5, 4)] # Used if Automatic_Qubit_Mapping = False. Boson qubits (mode by mode, Fock 0..N-1) then spin qubits
+Boson_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 1.0, 'coherent': 1.0}  # Used if Automatic_Qubit_Mapping = True
+Spin_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 1.0, 'coherent': 1.0}   # Spin weights also apply to the spin-boson couplers
+print(f'Automatic_Qubit_Mapping = {Automatic_Qubit_Mapping}')
+
 
 #---Qutip Sim (independent of Timesteps since Total_time is fixed)---#
 
@@ -59,9 +69,15 @@ else:
 
 if Noise == True:
     Ref_circuit, qubits = TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Total_time/Timesteps_List[0], Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
-    Willow_qubits = MapQubitsToDevice(qubits, Ref_circuit, device, cal)
+    if Automatic_Qubit_Mapping == True:
+        Willow_qubits = MapQubitsToDevice(qubits, Ref_circuit, device, cal, qubits[Number_of_Bosonic_Modes*Number_of_Fock_States:], noise_props=noise_props, boson_weights=Boson_Weights, spin_weights=Spin_Weights)
+    else:
+        if len(Manual_Qubit_Mapping) != len(qubits):
+            raise ValueError(f'Manual_Qubit_Mapping has {len(Manual_Qubit_Mapping)} qubits, circuit needs {len(qubits)}')
+        Willow_qubits = Manual_Qubit_Mapping
     Qubit_Map = dict(zip(qubits, Willow_qubits))
-    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Ref_circuit.transform_qubits(Qubit_Map), Number_of_Fock_States, Number_of_Bosonic_Modes)
+    CheckQubitMapping(Willow_qubits, Ref_circuit.transform_qubits(Qubit_Map), device)
+    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Ref_circuit.transform_qubits(Qubit_Map), Number_of_Fock_States, Number_of_Bosonic_Modes, noise_props=noise_props)
     Mapping_fig.savefig('Qubit_Mapping.png', dpi=80)
 
     print('Qubit mapping:')
@@ -72,9 +88,10 @@ if Noise == True:
             role = f'spin {k-Number_of_Bosonic_Modes*Number_of_Fock_States}'
         print(f'  {q} [{role}] -> {w}')
     print('Mapping plot saved to Qubit_Mapping.png')
-    if input('Proceed with this mapping? [y/N] ').strip().lower() not in ('y', 'yes'):
-        print('Aborted')
-        sys.exit()
+    if Simulation_Approval == True:
+        if input('Proceed with this mapping? [y/N] ').strip().lower() not in ('y', 'yes'):
+            print('Aborted')
+            sys.exit()
 
 #---Scan over Timesteps---#
 
@@ -139,7 +156,7 @@ Fig_Height = 2.8*Rows     # inches; keep the suptitle a fixed distance from the 
 fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Total_time}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
 fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
 # fig.savefig('Timestep_Scan.png', dpi=80)
-with PdfPages(f'N{Number_of_Fock_States} CRZ_Noisy_Timestep_Scan.pdf') as pdf:
+with PdfPages(f'Output/CRZTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
     pdf.savefig(fig)

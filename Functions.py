@@ -5,6 +5,11 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from qutip import about, basis, tensor, destroy, mcsolve, mesolve, expect, qeye, sigmax, sigmay, sigmaz, fock, wigner, coherent
 from scipy.optimize import minimize_scalar
+import quimb.tensor as qtn
+
+
+#---QUTIP---#
+
 
 def QutipHamiltonian(NumberOfBosonicModes, NumberOfFockStates, displacement_coefficient, spin_interaction_coefficient, SpinBosonInteractionCoefficent):
     
@@ -53,6 +58,69 @@ def QutipSim(Number_of_Fock_States,Number_of_Bosonic_Modes, Total_time, Displace
     exp_sz = np.array([expect(sz_list[i], states) for i in range(Number_of_Bosonic_Modes)])
 
     return exp_n, exp_sz, Qutip_Time_Data
+
+
+#---TN---#
+
+
+def TNHamiltonian(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent):
+
+    a = np.zeros((N, N), dtype=complex)
+    for n in range(N - 1):
+        a[n, n + 1] = np.sqrt(n + 1)
+    n_op = np.diag(np.arange(N)).astype(complex)
+    proj_top = np.zeros((N, N), dtype=complex)
+    proj_top[N - 1, N - 1] = 1.0
+    sigma_x = np.array([[0, 1], [1, 0]], dtype=complex)
+    sigma_y = np.array([[0, -1j], [1j, 0]], dtype=complex)
+    sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
+    identity_2 = np.eye(2, dtype=complex)
+    identity_N = np.eye(N, dtype=complex)
+    op = dict(sx=np.kron(sigma_x, identity_N), sy=np.kron(sigma_y, identity_N), sz=np.kron(sigma_z, identity_N), a=np.kron(identity_2, a), adag=np.kron(identity_2, a.conj().T), n=np.kron(identity_2, n_op), proj_top=np.kron(identity_2, proj_top))
+
+    H1 = {}
+    for j in range(L):
+        H1[j] = D * (op["a"] + op["adag"]) + Spin_Boson_Interaction_Coefficent * (op["proj_top"] @ op["sx"])
+
+    H2 = {}
+    xy_bond = 0.5 * (np.kron(op["sx"], op["sx"]) + np.kron(op["sy"], op["sy"]))
+    for j in range(L - 1):
+        H2[(j, j + 1)] = spin_interaction_coefficient * xy_bond
+
+    return H1, H2, op
+
+
+def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent, times, max_bond=None, dt=0.02, tebd_order=4, progbar=False):
+    
+    d = 2 * N
+    vec0 = np.zeros(d, dtype=complex)
+    vec0[0] = 1.0
+    psi0 = qtn.MPS_product_state(vec0.copy() for _ in range(L))
+
+    H1, H2, op = TNHamiltonian(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent)
+    ham = qtn.LocalHam1D(L, H2=H2, H1=H1)
+    tebd = qtn.TEBD(psi0, ham, dt=dt, split_opts=({} if max_bond is None else dict(max_bond=max_bond)))
+    tebd.progbar = progbar
+
+    occupation = np.zeros((len(times), L))
+    magnetization = np.zeros((len(times), L))
+    truncation_error = np.zeros(len(times))
+    trotter_error = np.zeros(len(times))
+    for it, t in enumerate(times):
+        if t > 0:
+            tebd.update_to(t, order=tebd_order)
+        psi = tebd.pt
+        norm = np.real(psi.H @ psi) # Truncated weight is not renormalised, so 1 - <psi|psi> is the cumulative truncation error
+        for j in range(L):
+            occupation[it, j] = np.real(psi.local_expectation_exact(op["n"], (j,))) / norm
+            magnetization[it, j] = np.real(psi.local_expectation_exact(op["sz"], (j,))) / norm
+        truncation_error[it] = 1 - norm
+        trotter_error[it] = tebd.err # quimb's TEBD.err is a Trotter error estimate (||H|| * dt^(order+1) per step), not truncation
+
+    return occupation, magnetization, truncation_error, trotter_error
+
+
+#---CIRQ---#
 
 
 def TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent):
@@ -333,49 +401,3 @@ def UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Mo
     Unary_Mask = np.all(Boson_Results.sum(axis=2) == 1, axis=1)          # True if every register has exactly one qubit in |1>
     Full_Results_Postselected = Full_Results[Unary_Mask]
     return Full_Results_Postselected
-
-#---Old Functions---#
-
-def TrotterStep(Number_of_Fock_States, Number_of_Bosonic_Modes, Time):
-    qubits = cirq.LineQubit.range(Number_of_Bosonic_Modes * (Number_of_Fock_States+1))
-    Trotter_circuit = cirq.Circuit()
-
-    for j in range(Number_of_Bosonic_Modes):
-        for i in range(0, Number_of_Fock_States-1, 2):
-            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-2*Time*(i+1)**0.5/np.pi)(qubits[j*Number_of_Fock_States+i], qubits[j*Number_of_Fock_States+i+1]))
-
-        for i in range(1, Number_of_Fock_States-1, 2):
-            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-2*Time*(i+1)**0.5/np.pi)(qubits[j*Number_of_Fock_States+i], qubits[j*Number_of_Fock_States+i+1]))
-
-    for j in range(0, Number_of_Bosonic_Modes-1, 2):
-        Trotter_circuit.append(cirq.ISwapPowGate(exponent=-4*Time/np.pi)(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j], qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j+1]))
-
-    for j in range(1, Number_of_Bosonic_Modes-1, 2):
-            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-4*Time/np.pi)(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j], qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j+1]))
-
-    for j in range (Number_of_Bosonic_Modes):
-         Trotter_circuit.append(cirq.CX(qubits[(j+1)*Number_of_Fock_States-1],qubits[Number_of_Fock_States*Number_of_Bosonic_Modes+j]))
-
-    return Trotter_circuit, qubits
-
-def TrotterStepCZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time):
-    qubits = cirq.LineQubit.range(Number_of_Bosonic_Modes * (Number_of_Fock_States+1))
-    Trotter_circuit = cirq.Circuit()
-
-    for j in range(Number_of_Bosonic_Modes):
-        for i in range(0, Number_of_Fock_States-1, 2):
-            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-2*Time*(i+1)**0.5/np.pi)(qubits[j*Number_of_Fock_States+i], qubits[j*Number_of_Fock_States+i+1]))
-
-        for i in range(1, Number_of_Fock_States-1, 2):
-            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-2*Time*(i+1)**0.5/np.pi)(qubits[j*Number_of_Fock_States+i], qubits[j*Number_of_Fock_States+i+1]))
-
-    for j in range(0, Number_of_Bosonic_Modes-1, 2):
-        Trotter_circuit.append(cirq.ISwapPowGate(exponent=-4*Time/np.pi)(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j], qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j+1]))
-
-    for j in range(1, Number_of_Bosonic_Modes-1, 2):
-            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-4*Time/np.pi)(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j], qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j+1]))
-
-    for j in range (Number_of_Bosonic_Modes):
-         Trotter_circuit.append(cirq.CZ(qubits[(j+1)*Number_of_Fock_States-1],qubits[Number_of_Fock_States*Number_of_Bosonic_Modes+j]))
-
-    return Trotter_circuit, qubits

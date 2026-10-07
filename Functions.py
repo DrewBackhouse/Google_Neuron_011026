@@ -41,6 +41,20 @@ def QutipHamiltonian(NumberOfBosonicModes, NumberOfFockStates, displacement_coef
     
     return H, n_list, sz_list
 
+def QutipSim(Number_of_Fock_States,Number_of_Bosonic_Modes, Total_time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent):
+    
+    state_list = [tensor(basis(2,0),fock(Number_of_Fock_States,0)) for _ in range(Number_of_Bosonic_Modes)]
+    psi0 = tensor(state_list)
+    Qutip_Time_Data = np.linspace(0, Total_time, int(Total_time*10))
+    H, n_list, sz_list = QutipHamiltonian(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
+    result = mesolve(H, psi0, Qutip_Time_Data, args={'Displacement_Coefficent': Displacement_Coefficent, 'Spin_Interaction_Coefficent': Spin_Interaction_Coefficent, 'Spin_Boson_Interaction_Coefficent': Spin_Boson_Interaction_Coefficent})
+    states = result.states
+    exp_n = np.array([expect(n_list[i], states) for i in range(Number_of_Bosonic_Modes)])
+    exp_sz = np.array([expect(sz_list[i], states) for i in range(Number_of_Bosonic_Modes)])
+
+    return exp_n, exp_sz, Qutip_Time_Data
+
+
 def TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent):
     qubits = cirq.LineQubit.range(Number_of_Bosonic_Modes * (Number_of_Fock_States+1))
     Trotter_circuit = cirq.Circuit()
@@ -60,6 +74,28 @@ def TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displac
 
     for j in range (Number_of_Bosonic_Modes):
          Trotter_circuit.append(cirq.rz(2*Time*Spin_Boson_Interaction_Coefficent).controlled()(qubits[(j+1)*Number_of_Fock_States-1],qubits[Number_of_Fock_States*Number_of_Bosonic_Modes+j]))
+
+    return Trotter_circuit, qubits
+
+def TrotterStepCRX(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent):
+    qubits = cirq.LineQubit.range(Number_of_Bosonic_Modes * (Number_of_Fock_States+1))
+    Trotter_circuit = cirq.Circuit()
+
+    for j in range(Number_of_Bosonic_Modes):
+        for i in range(0, Number_of_Fock_States-1, 2):
+            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-2*Displacement_Coefficent*Time*(i+1)**0.5/np.pi)(qubits[j*Number_of_Fock_States+i], qubits[j*Number_of_Fock_States+i+1]))
+
+        for i in range(1, Number_of_Fock_States-1, 2):
+            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-2*Displacement_Coefficent*Time*(i+1)**0.5/np.pi)(qubits[j*Number_of_Fock_States+i], qubits[j*Number_of_Fock_States+i+1]))
+
+    for j in range(0, Number_of_Bosonic_Modes-1, 2):
+        Trotter_circuit.append(cirq.ISwapPowGate(exponent=-4*Spin_Interaction_Coefficent*Time/np.pi)(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j], qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j+1]))
+
+    for j in range(1, Number_of_Bosonic_Modes-1, 2):
+            Trotter_circuit.append(cirq.ISwapPowGate(exponent=-4*Spin_Interaction_Coefficent*Time/np.pi)(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j], qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j+1]))
+
+    for j in range (Number_of_Bosonic_Modes):
+         Trotter_circuit.append(cirq.rx(2*Time*Spin_Boson_Interaction_Coefficent).controlled()(qubits[(j+1)*Number_of_Fock_States-1],qubits[Number_of_Fock_States*Number_of_Bosonic_Modes+j]))
 
     return Trotter_circuit, qubits
 
@@ -217,16 +253,9 @@ def PlotQubitEmbedding(cal, qubits_willow, circuit, Number_of_Fock_States, Numbe
         single_qubit_pct = {op_id.qubits[0]: error * 100 for op_id, error in noise_props.gate_pauli_errors.items() if op_id.gate_type == cirq.PhasedXZGate}
         readout_pct = {q: sum(errors) * 100 for q, errors in noise_props.readout_errors.items()}      # p(0->1) + p(1->0)
         median_tphi = np.median(list(noise_props.tphi_ns.values()))
-        print(f'Per used qubit (device median Tphi {median_tphi/1000:.1f} us, 1q error {np.median(list(single_qubit_pct.values())):.3f}%, '
-              f'readout p(0->1)+p(1->0) {np.median(list(readout_pct.values())):.2f}%):')
-        for q in qubits_willow:
-            print(f'  {q}: Tphi {noise_props.tphi_ns[q]/1000:.1f} us, 1q error {single_qubit_pct[q]:.3f}%, readout {readout_pct[q]:.2f}%')
         fsim = {frozenset(op_id.qubits): v for op_id, v in noise_props.fsim_errors.items() if op_id.gate_type == cirq.CZPowGate}
-        print(f'Coherent CZ errors per used coupler (device median |phi| {np.median([abs(v.phi) for v in fsim.values()]):.3f}, '
-              f'|theta| {np.median([abs(v.theta) for v in fsim.values()]):.3f} rad):')
         for qa, qb in sorted(boson_edges | spin_edges | mixed_edges):
             v = fsim.get(frozenset((qa, qb)))
-            print(f'  {qa}-{qb}: ' + (f'phi={v.phi:+.3f}, theta={v.theta:+.3f} rad' if v is not None else 'no data'))
 
     def highlight_qubits(ax):
         for group, color in ((boson_qubits, EMBEDDING_COLOR_BOSON), (spin_qubits, EMBEDDING_COLOR_SPIN)):

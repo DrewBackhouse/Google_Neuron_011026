@@ -26,10 +26,10 @@ Number_of_Shots = 2000
 Noise = True
 print(f'Noise = {Noise}')
 Simulation_Approval = True
+Automatic_Qubit_Mapping = True
 
 #---Qubit mapping---#
 
-Automatic_Qubit_Mapping = True
 Manual_Qubit_Mapping = [cirq.GridQubit(6, 1), cirq.GridQubit(6, 2), cirq.GridQubit(5, 2), cirq.GridQubit(4, 2), cirq.GridQubit(4, 3), cirq.GridQubit(3, 3), cirq.GridQubit(3, 4), cirq.GridQubit(4, 4), cirq.GridQubit(5, 4)] # Used if Automatic_Qubit_Mapping = False. Boson qubits (mode by mode, Fock 0..N-1) then spin qubits
 Boson_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 1.0, 'coherent': 1.0}  # Used if Automatic_Qubit_Mapping = True
 Spin_Weights = {'T1': 1.0, 'Tphi': 5.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 1.0, 'coherent': 1.0}   # Spin weights also apply to the spin-boson couplers

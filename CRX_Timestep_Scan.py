@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from qutip import basis, tensor, mesolve, expect, fock
 
-from Functions import TrotterStepCRZ, QutipHamiltonian, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection
+from Functions import QutipHamiltonian, QutipSim, TrotterStepCRX, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection
 
 #---Model Parameters---#
 
@@ -23,10 +23,9 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 #---Simulation Parameters---#
 
 Total_time = 20
-Timesteps_List = list(range(25, 26))
+Timesteps_List = list(range(5, 6))
 Number_of_Shots = 2000
 Noise = True
-print(f'Noise = {Noise}')
 Simulation_Approval = True
 Automatic_Qubit_Mapping = True
 
@@ -35,19 +34,6 @@ Automatic_Qubit_Mapping = True
 Manual_Qubit_Mapping = [cirq.GridQubit(6, 1), cirq.GridQubit(6, 2), cirq.GridQubit(5, 2), cirq.GridQubit(4, 2), cirq.GridQubit(4, 3), cirq.GridQubit(3, 3), cirq.GridQubit(3, 4), cirq.GridQubit(4, 4), cirq.GridQubit(5, 4)] # Used if Automatic_Qubit_Mapping = False. Boson qubits (mode by mode, Fock 0..N-1) then spin qubits
 Boson_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 2.0, 'coherent': 2.0}  # Used if Automatic_Qubit_Mapping = True
 Spin_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ': 2.0, 'coherent': 2.0}   # Spin weights also apply to the spin-boson couplers
-print(f'Automatic_Qubit_Mapping = {Automatic_Qubit_Mapping}')
-
-
-#---Qutip Sim (independent of Timesteps since Total_time is fixed)---#
-
-state_list = [tensor(basis(2,0),fock(Number_of_Fock_States,0)) for _ in range(Number_of_Bosonic_Modes)]
-psi0 = tensor(state_list)
-Qutip_Time_Data = np.linspace(0, Total_time, int(Total_time*10))
-H, n_list, sz_list = QutipHamiltonian(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
-result = mesolve(H, psi0, Qutip_Time_Data, args={'Displacement_Coefficent': Displacement_Coefficent, 'Spin_Interaction_Coefficent': Spin_Interaction_Coefficent, 'Spin_Boson_Interaction_Coefficent': Spin_Boson_Interaction_Coefficent})
-states = result.states
-exp_n = np.array([expect(n_list[i], states) for i in range(Number_of_Bosonic_Modes)])
-exp_sz = np.array([expect(sz_list[i], states) for i in range(Number_of_Bosonic_Modes)])
 
 #---Noise model---#
 
@@ -65,33 +51,35 @@ if Noise == True:
 else:
     simulator = cirq.Simulator()
 
-#---Qubit mapping (computed once; interaction graph is independent of Trotter time)---#
+#---Trotter circuit and Qubit mapping---#
+
+Trotter_circuit, qubits = TrotterStepCRX(Number_of_Fock_States, Number_of_Bosonic_Modes, Total_time/Timesteps_List[0], Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
+print(Trotter_circuit)
+Trotter_Diagram = str(Trotter_circuit)
 
 if Noise == True:
-    Ref_circuit, qubits = TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Total_time/Timesteps_List[0], Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
     if Automatic_Qubit_Mapping == True:
-        Willow_qubits = MapQubitsToDevice(qubits, Ref_circuit, device, cal, qubits[Number_of_Bosonic_Modes*Number_of_Fock_States:], noise_props=noise_props, boson_weights=Boson_Weights, spin_weights=Spin_Weights)
+        Willow_qubits = MapQubitsToDevice(qubits, Trotter_circuit, device, cal, qubits[Number_of_Bosonic_Modes*Number_of_Fock_States:], noise_props=noise_props, boson_weights=Boson_Weights, spin_weights=Spin_Weights)
     else:
         if len(Manual_Qubit_Mapping) != len(qubits):
             raise ValueError(f'Manual_Qubit_Mapping has {len(Manual_Qubit_Mapping)} qubits, circuit needs {len(qubits)}')
         Willow_qubits = Manual_Qubit_Mapping
     Qubit_Map = dict(zip(qubits, Willow_qubits))
-    CheckQubitMapping(Willow_qubits, Ref_circuit.transform_qubits(Qubit_Map), device)
-    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Ref_circuit.transform_qubits(Qubit_Map), Number_of_Fock_States, Number_of_Bosonic_Modes, noise_props=noise_props)
+    Trotter_circuit = Trotter_circuit.transform_qubits(Qubit_Map)
+    CheckQubitMapping(Willow_qubits, Trotter_circuit, device)
+    Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Trotter_circuit, Number_of_Fock_States, Number_of_Bosonic_Modes, noise_props=noise_props)
     Mapping_fig.savefig('Output/Qubit_Mapping.png', dpi=80)
-
-    print('Qubit mapping:')
-    for k, (q, w) in enumerate(Qubit_Map.items()):
-        if k < Number_of_Bosonic_Modes*Number_of_Fock_States:
-            role = f'boson {k//Number_of_Fock_States}, Fock {k%Number_of_Fock_States}'
-        else:
-            role = f'spin {k-Number_of_Bosonic_Modes*Number_of_Fock_States}'
-        print(f'  {q} [{role}] -> {w}')
+    Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
+    print(Trotter_circuit)
     print('Mapping plot saved to Qubit_Mapping.png')
     if Simulation_Approval == True:
-        if input('Proceed with this mapping? [y/N] ').strip().lower() not in ('y', 'yes'):
+        if input('Proceed with simulation? [y/N] ').strip().lower() not in ('y', 'yes'):
             print('Aborted')
             sys.exit()
+
+#---Qutip Sim---#
+
+exp_n, exp_sz, Qutip_Time_Data = QutipSim(Number_of_Fock_States,Number_of_Bosonic_Modes, Total_time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
 
 #---Scan over Timesteps---#
 
@@ -100,7 +88,7 @@ for Timesteps in Timesteps_List:
     start = time.time()
     Time = Total_time/Timesteps
 
-    Trotter_circuit, qubits = TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
+    Trotter_circuit, qubits = TrotterStepCRX(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
     if Noise == True:
         Trotter_circuit = Trotter_circuit.transform_qubits(Qubit_Map)
         qubits = Willow_qubits
@@ -112,12 +100,11 @@ for Timesteps in Timesteps_List:
         circuit = cirq.Circuit()
         for j in range(Number_of_Bosonic_Modes):
             circuit.append(cirq.X(qubits[j*Number_of_Fock_States]))
-        for j in range(Number_of_Bosonic_Modes):
-            circuit.append(cirq.H(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j]))
         circuit.append([Trotter_circuit]*i)
-        for j in range(Number_of_Bosonic_Modes):
-            circuit.append(cirq.H(qubits[Number_of_Bosonic_Modes*Number_of_Fock_States+j]))
         circuit.append(cirq.measure(*qubits, key='m'))
+        if i == 1 and Timesteps == Timesteps_List[0]:
+            print(circuit)
+            Full_Circuit_Diagram = str(circuit)
         Full_Results = simulator.run(circuit, repetitions=Number_of_Shots).measurements['m']
         Full_Results_Postselected = UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Modes)
         Min_Kept = min(Min_Kept, len(Full_Results_Postselected))
@@ -156,8 +143,17 @@ Fig_Height = 2.8*Rows     # inches; keep the suptitle a fixed distance from the 
 fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Total_time}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
 fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
 # fig.savefig('Timestep_Scan.png', dpi=80)
-with PdfPages(f'Output/CRZTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}.pdf') as pdf:
+
+Circuit_Text = (f'Trotter step circuit (Trotter time={Total_time/Timesteps_List[0]:.3f})\n\n{Trotter_Diagram}\n\n\n'
+                f'Full circuit, first timestep (Timesteps={Timesteps_List[0]})\n\n{Full_Circuit_Diagram}')
+Lines = Circuit_Text.split('\n')
+Font_Size = 6
+Circuit_fig = plt.figure(figsize=(max(8, 0.6*Font_Size/72*max(len(l) for l in Lines) + 1), max(4, 1.2*Font_Size/72*len(Lines) + 1)))   # size page to fit the text so wide circuits aren't clipped
+Circuit_fig.text(0.5/Circuit_fig.get_figwidth(), 1 - 0.5/Circuit_fig.get_figheight(), Circuit_Text, family='monospace', fontsize=Font_Size, va='top', ha='left')
+
+with PdfPages(f'Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
+    pdf.savefig(Circuit_fig)
     pdf.savefig(fig)
-print(f'Saved N{Number_of_Fock_States} CRZ_Noisy_Timestep_Scan.pdf')
+print(f'Saved Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}.pdf')

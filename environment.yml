@@ -1,0 +1,16 @@
+# Versions match the local GoogleQVM conda env. Create on the cluster with: conda env create -f environment.yml
+name: tn_sim
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - numpy==2.2.6
+      - scipy==1.17.1
+      - matplotlib==3.11.1
+      - quimb==1.15.0
+      - physics-tenpy==1.1.1
+      - qutip==5.3.1
+      - cirq-core==1.7.0
+      - networkx==3.6.1

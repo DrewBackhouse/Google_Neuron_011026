@@ -4,7 +4,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
-from Functions import TNHamiltonian, TNSim
+from Functions import TNSimQR
 
 #---Model Parameters---#
 
@@ -21,14 +21,16 @@ Timepoints = 20
 max_bond = 64
 Timestep = 0.1
 tebd_order = 2
+cbe_expand = 0.1 # QR-TEBD bond expansion rate, bond dimension can grow by up to this fraction per step
+svd_min = 1e-10 # Singular values below this are discarded
 
 #---TN Sim---#
 
 times = np.linspace(0, Total_time, Timepoints)
 t0 = time.time()
-occupation, magnetization, truncation_error, trotter_error = TNSim(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent, times, max_bond, Timestep, tebd_order, progbar=False)
+occupation, magnetization, truncation_error, trotter_error = TNSimQR(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent, times, max_bond, Timestep, tebd_order, cbe_expand, svd_min)
 tn_time = time.time() - t0
-print(f"TEBD (max_bond={max_bond}) done in {tn_time:.2f}s, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}")
+print(f"QR-TEBD (TeNPy) (max_bond={max_bond}) done in {tn_time:.2f}s, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}")
 
 fig, (ax_occ, ax_mag) = plt.subplots(1, 2, figsize=(11, 4.5))
 colors = plt.cm.viridis(np.linspace(0.1, 0.9, Number_of_Bosonic_Modes))
@@ -38,9 +40,9 @@ for j in range(Number_of_Bosonic_Modes):
 ax_occ.set_xlabel("t"); ax_occ.set_ylabel("<n_j>"); ax_occ.set_title("Boson occupation")
 ax_mag.set_xlabel("t"); ax_mag.set_ylabel("<sz_j>"); ax_mag.set_title("Spin magnetization")
 ax_occ.legend(fontsize=7, ncol=2)
-fig.suptitle(f"TEBD only, L={Number_of_Bosonic_Modes} N={Number_of_Fock_States}, max bond={max_bond}, truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}")
+fig.suptitle(f"QR-TEBD (TeNPy), L={Number_of_Bosonic_Modes} N={Number_of_Fock_States}, max bond={max_bond}, truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}")
 fig.tight_layout()
 
-with PdfPages(f'Output/TN_Sim_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}.pdf') as pdf:
+with PdfPages(f'Output/TN_Sim_QR_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}.pdf') as pdf:
     pdf.savefig(fig)
-print(f'Saved Output/TN_Sim_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}.pdf')
+print(f'Saved Output/TN_Sim_QR_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}.pdf')

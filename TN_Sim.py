@@ -8,7 +8,7 @@ from Functions import TNHamiltonian, TNSim
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 6
+Number_of_Fock_States = 10
 Number_of_Bosonic_Modes = 3
 Displacement_Coefficent = 1
 Spin_Interaction_Coefficent = 0.5
@@ -16,8 +16,8 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 10
-Timepoints = 20
+Total_time = 120
+Timepoints = 200
 max_bond = 64
 Timestep = 0.1
 tebd_order = 2
@@ -38,9 +38,9 @@ for j in range(Number_of_Bosonic_Modes):
 ax_occ.set_xlabel("t"); ax_occ.set_ylabel("<n_j>"); ax_occ.set_title("Boson occupation")
 ax_mag.set_xlabel("t"); ax_mag.set_ylabel("<sz_j>"); ax_mag.set_title("Spin magnetization")
 ax_occ.legend(fontsize=7, ncol=2)
-fig.suptitle(f"TEBD only, L={Number_of_Bosonic_Modes} N={Number_of_Fock_States}, max bond={max_bond}, truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}")
+fig.suptitle(f"L={Number_of_Bosonic_Modes} N={Number_of_Fock_States}, max bond={max_bond}, Timestep={Timestep}, TEBD order={tebd_order}")
 fig.tight_layout()
 
-with PdfPages(f'Output/TN_Sim_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}.pdf') as pdf:
+with PdfPages(f'Output/TN_Sim_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}_Bond{max_bond}_Step{Timestep}_TEBD{tebd_order}.pdf') as pdf:
     pdf.savefig(fig)
-print(f'Saved Output/TN_Sim_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}.pdf')
+print(f'Saved Output/TN_Sim_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}_Bond{max_bond}_Step{Timestep}_TEBD{tebd_order}.pdf')

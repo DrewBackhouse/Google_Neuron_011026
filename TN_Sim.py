@@ -8,19 +8,19 @@ from Functions import TNHamiltonian, TNSim
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 10
-Number_of_Bosonic_Modes = 5
+Number_of_Fock_States = 6
+Number_of_Bosonic_Modes = 3
 Displacement_Coefficent = 1
-Spin_Interaction_Coefficent = 1
+Spin_Interaction_Coefficent = 0.5
 Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_States -0.5)**0.5 # Value for a full spin flip
 
 #---Simulation Parameters---#
 
-Total_time = 100
-Timepoints = 200
-max_bond = None
-Timestep = 0.02
-tebd_order = 4
+Total_time = 10
+Timepoints = 20
+max_bond = 64
+Timestep = 0.1
+tebd_order = 2
 
 #---TN Sim---#
 

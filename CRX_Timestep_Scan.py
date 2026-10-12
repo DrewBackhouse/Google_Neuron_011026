@@ -23,8 +23,8 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 20
-Timesteps_List = list(range(5, 6))
+Total_time = 12.6
+Timesteps_List = list(range(22, 23))
 Number_of_Shots = 2000
 Noise = True
 Simulation_Approval = True

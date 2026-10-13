@@ -17,16 +17,15 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 #---Simulation Parameters---#
 
 Total_time = 120
-Timepoints = 200
+Steps_per_sample = 5 # Measure every k Trotter steps
 max_bond = 64
 Timestep = 0.1
 tebd_order = 2
 
 #---TN Sim---#
 
-times = np.linspace(0, Total_time, Timepoints)
 t0 = time.time()
-occupation, magnetization, truncation_error, trotter_error = TNSim(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent, times, max_bond, Timestep, tebd_order, progbar=False)
+times, occupation, magnetization, truncation_error, trotter_error = TNSim(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, Timestep, tebd_order, Steps_per_sample)
 tn_time = time.time() - t0
 print(f"TEBD (max_bond={max_bond}) done in {tn_time:.2f}s, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}")
 

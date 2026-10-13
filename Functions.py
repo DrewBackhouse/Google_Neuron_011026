@@ -90,8 +90,10 @@ def TNHamiltonian(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_
     return H1, H2, op
 
 
-def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent, times, max_bond=None, dt=0.02, tebd_order=4, progbar=False):
-    
+def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, dt, tebd_order, steps_per_sample):
+    n_samples = int(Total_time / (steps_per_sample * dt) + 1e-9) + 1
+    times = np.arange(n_samples) * steps_per_sample * dt
+
     d = 2 * N
     vec0 = np.zeros(d, dtype=complex)
     vec0[0] = 1.0
@@ -100,15 +102,15 @@ def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coeffice
     H1, H2, op = TNHamiltonian(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent)
     ham = qtn.LocalHam1D(L, H2=H2, H1=H1)
     tebd = qtn.TEBD(psi0, ham, dt=dt, split_opts=({} if max_bond is None else dict(max_bond=max_bond)))
-    tebd.progbar = progbar
 
     occupation = np.zeros((len(times), L))
     magnetization = np.zeros((len(times), L))
     truncation_error = np.zeros(len(times))
     trotter_error = np.zeros(len(times))
-    for it, t in enumerate(times):
-        if t > 0:
-            tebd.update_to(t, order=tebd_order)
+    for it in range(len(times)):
+        if it > 0:
+            for step in range(steps_per_sample):
+                tebd.step(order=tebd_order, queue=(step < steps_per_sample - 1)) # Queued steps let quimb merge adjacent half-sweeps, the last step flushes the queue so psi is fully evolved before measuring
         psi = tebd.pt
         norm = np.real(psi.H @ psi) # Truncated weight is not renormalised, so 1 - <psi|psi> is the cumulative truncation error
         for j in range(L):
@@ -117,7 +119,7 @@ def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coeffice
         truncation_error[it] = 1 - norm
         trotter_error[it] = tebd.err # quimb's TEBD.err is a Trotter error estimate (||H|| * dt^(order+1) per step), not truncation
 
-    return occupation, magnetization, truncation_error, trotter_error
+    return times, occupation, magnetization, truncation_error, trotter_error
 
 
 #---CIRQ---#

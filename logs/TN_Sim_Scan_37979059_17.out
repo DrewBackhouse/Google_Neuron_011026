@@ -1,0 +1,38 @@
+Task 17: max_bond=256 timestep=0.025 tebd_order=4 on erc-hpc-comp189
+Running 9 J values on 9 workers: max_bond=256, Timestep=0.025, tebd_order=4
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+J=0.1: TEBD (max_bond=256) done in 10291.01s, final truncation error=2.00e-06, Trotter error=1.60e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.2: TEBD (max_bond=256) done in 18118.37s, final truncation error=1.77e-06, Trotter error=1.60e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.30000000000000004: TEBD (max_bond=256) done in 21550.86s, final truncation error=1.19e-06, Trotter error=1.60e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.4: TEBD (max_bond=256) done in 23942.87s, final truncation error=8.10e-07, Trotter error=1.61e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.5: TEBD (max_bond=256) done in 24564.70s, final truncation error=6.03e-07, Trotter error=1.61e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.6: TEBD (max_bond=256) done in 24974.21s, final truncation error=4.68e-07, Trotter error=1.62e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.8: TEBD (max_bond=256) done in 25418.44s, final truncation error=3.31e-07, Trotter error=1.64e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.7000000000000001: TEBD (max_bond=256) done in 25727.36s, final truncation error=3.88e-07, Trotter error=1.63e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf
+J=0.9: TEBD (max_bond=256) done in 25766.21s, final truncation error=2.80e-07, Trotter error=1.65e-03
+Saved Output/TN_Sim_Scan_L5_N8_T100_Bond256_Step0.025_TEBD4.pdf

@@ -192,6 +192,40 @@ def TrotterStepCZ_New(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Disp
 
     return Trotter_circuit, qubits
 
+_STRATIFY_CATEGORIES = [lambda op: len(op.qubits) == 2, lambda op: len(op.qubits) == 1]
+
+def _MergeAndStratify(circuit):
+    circuit = cirq.map_operations(circuit, lambda op, _: cirq.CZ(*op.qubits) if isinstance(op.gate, cirq.CZPowGate) and abs(op.gate.exponent) == 1 else op)  # CZ^-1 == CZ
+    circuit = cirq.merge_single_qubit_gates_to_phxz(circuit)   # merges per-qubit runs, not per-moment
+    circuit = cirq.drop_negligible_operations(circuit)
+    circuit = cirq.stratified_circuit(circuit, categories=_STRATIFY_CATEGORIES)
+    return cirq.drop_empty_moments(circuit)
+
+def CircuitSimulation(simulator, circuit, Number_of_Shots, Pauli_Twirling, Twirl_Instances, qubits):
+    circuit = cirq.optimize_for_target_gateset(circuit, gateset=cirq.CZTargetGateset())  # compile to CZ first (merges initial X too)
+    circuit = cirq.stratified_circuit(circuit, categories=_STRATIFY_CATEGORIES)  # CZ-only moments so the gauge transformer can act on them
+    if Pauli_Twirling == True:
+        optimised_circuits = [_MergeAndStratify(cirq.transformers.CPhaseGaugeTransformerMM()(circuit)) for _ in range(Twirl_Instances)]
+        results = simulator.run_batch(optimised_circuits, repetitions=Number_of_Shots//Twirl_Instances)
+        Full_Results = np.concatenate([res[0].measurements['m'] for res in results])
+        optimised_circuit = optimised_circuits[0]
+    else:
+        optimised_circuit = _MergeAndStratify(circuit)
+        Full_Results = simulator.run(optimised_circuit, repetitions=Number_of_Shots).measurements['m']
+    return Full_Results, optimised_circuit
+
+def UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Modes):
+    Boson_Results = Full_Results[:, :Number_of_Bosonic_Modes*Number_of_Fock_States].reshape(-1, Number_of_Bosonic_Modes, Number_of_Fock_States)     # (shots, modes, Fock states)
+    Unary_Mask = np.all(Boson_Results.sum(axis=2) == 1, axis=1)          # True if every register has exactly one qubit in |1>
+    Full_Results_Postselected = Full_Results[Unary_Mask]
+    return Full_Results_Postselected
+
+def PauliTwirling(circuit, num_instances):
+    circuits = [cirq.transformers.CPhaseGaugeTransformerMM()(circuit) for _ in range(num_instances)]
+    return circuits
+
+#---Qubit Mapping---#
+
 ERROR_TYPES = ('T1', 'Tphi', 'single_qubit', 'readout', 'CZ', 'coherent')
 
 def MapQubitsToDevice(qubits, circuit, device, cal, spin_qubits, noise_props=None, boson_weights=None, spin_weights=None, beam_width=2000):
@@ -397,9 +431,3 @@ def PlotQubitEmbedding(cal, qubits_willow, circuit, Number_of_Fock_States, Numbe
     fig.suptitle(f'Calibration ({cal.timestamp_str()}) -- embedding highlighted', fontweight='bold')
     fig.tight_layout(rect=[0, 0, 1, 0.96 if noise_props is None else 0.985])
     return fig
-
-def UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Modes):
-    Boson_Results = Full_Results[:, :Number_of_Bosonic_Modes*Number_of_Fock_States].reshape(-1, Number_of_Bosonic_Modes, Number_of_Fock_States)     # (shots, modes, Fock states)
-    Unary_Mask = np.all(Boson_Results.sum(axis=2) == 1, axis=1)          # True if every register has exactly one qubit in |1>
-    Full_Results_Postselected = Full_Results[Unary_Mask]
-    return Full_Results_Postselected

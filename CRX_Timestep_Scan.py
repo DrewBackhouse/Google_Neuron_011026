@@ -10,12 +10,13 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from qutip import basis, tensor, mesolve, expect, fock
 
-from Functions import QutipHamiltonian, QutipSim, TrotterStepCRX, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection
+from Functions import QutipHamiltonian, QutipSim, TrotterStepCRX, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection, CircuitSimulation
 
+#To Do: Print each unique circuit to see what is happening, maybe also a 2 timestep circuit to check overlap merging etc. Run twirled vs untwirled. Figure out how to post-process twirled results. Look into REM. Put more things into functions and seperate functions into diffrent scripts by modeule dependency.
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 8
+Number_of_Fock_States = 6
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1
 Spin_Interaction_Coefficent = 0.1
@@ -23,11 +24,13 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 12.6
-Timesteps_List = list(range(22, 23))
-Number_of_Shots = 2000
+Total_time = 5
+Timesteps_List = list(range(1, 2))
+Number_of_Shots = 10
 Noise = True
-Simulation_Approval = True
+Pauli_Twirling = True
+Twirl_Instances = 2
+Simulation_Approval = False
 Automatic_Qubit_Mapping = True
 
 #---Qubit mapping---#
@@ -70,8 +73,8 @@ if Noise == True:
     CheckQubitMapping(Willow_qubits, Trotter_circuit, device)
     Mapping_fig = PlotQubitEmbedding(cal, Willow_qubits, Trotter_circuit, Number_of_Fock_States, Number_of_Bosonic_Modes, noise_props=noise_props)
     Mapping_fig.savefig('Output/Qubit_Mapping.png', dpi=80)
-    Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
-    print(Trotter_circuit)
+    #Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
+    #print(Trotter_circuit.to_text_diagram(qubit_order=Willow_qubits))
     print('Mapping plot saved to Qubit_Mapping.png')
     if Simulation_Approval == True:
         if input('Proceed with simulation? [y/N] ').strip().lower() not in ('y', 'yes'):
@@ -103,10 +106,10 @@ for Timesteps in Timesteps_List:
             circuit.append(cirq.X(qubits[j*Number_of_Fock_States]))
         circuit.append([Trotter_circuit]*i)
         circuit.append(cirq.measure(*qubits, key='m'))
+        Full_Results, optimised_circuit = CircuitSimulation(simulator, circuit, Number_of_Shots, Pauli_Twirling, Twirl_Instances, qubits)
         if i == 1 and Timesteps == Timesteps_List[0]:
-            print(circuit)
-            Full_Circuit_Diagram = str(circuit)
-        Full_Results = simulator.run(circuit, repetitions=Number_of_Shots).measurements['m']
+                    Full_Circuit_Diagram = str(optimised_circuit.to_text_diagram(qubit_order=qubits))
+        print(Full_Results)
         Full_Results_Postselected = UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Modes)
         Min_Kept = min(Min_Kept, len(Full_Results_Postselected))
         Averaged_Results = Full_Results_Postselected.mean(axis=0)
@@ -152,9 +155,9 @@ Font_Size = 6
 Circuit_fig = plt.figure(figsize=(max(8, 0.6*Font_Size/72*max(len(l) for l in Lines) + 1), max(4, 1.2*Font_Size/72*len(Lines) + 1)))   # size page to fit the text so wide circuits aren't clipped
 Circuit_fig.text(0.5/Circuit_fig.get_figwidth(), 1 - 0.5/Circuit_fig.get_figheight(), Circuit_Text, family='monospace', fontsize=Font_Size, va='top', ha='left')
 
-with PdfPages(f'Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}.pdf') as pdf:
+with PdfPages(f'Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}_Twirl{Pauli_Twirling}.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
     pdf.savefig(Circuit_fig)
     pdf.savefig(fig)
-print(f'Saved Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}.pdf')
+print(f'Saved Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}_Twirl{Pauli_Twirling}.pdf')

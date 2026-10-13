@@ -13,17 +13,16 @@ from Functions import TNHamiltonian, TNSim
 #---Model Parameters---#
 
 Number_of_Fock_States = 8
-Number_of_Bosonic_Modes = 3
+Number_of_Bosonic_Modes = 7
 Displacement_Coefficent = 1
-J_List = np.round(np.arange(0.1, 1.1 + 1e-9, 0.1), 6)
+J_List = np.round(np.arange(0.1, 1 + 1e-9, 0.1), 6)
 Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_States -0.5)**0.5 # Value for a full spin flip
 
 #---Simulation Parameters (defaults, overridable from the command line for cluster array jobs)---#
 
-Total_time = 20
+Total_time = 100
 Timestep = 0.1
-Steps_per_sample = round(0.5/Timestep)
-max_bond = 64
+max_bond = 32
 tebd_order = 2
 
 parser = argparse.ArgumentParser()
@@ -34,21 +33,35 @@ parser.add_argument('--workers', type=int, default=int(os.environ.get('SLURM_CPU
 args = parser.parse_args()
 max_bond, Timestep, tebd_order = args.max_bond, args.timestep, args.tebd_order
 
+Steps_per_sample = round(0.5/Timestep)
+
 #---Output---#
 
-os.makedirs('Output', exist_ok=True)
-Output_Path = f'Output/TN_Sim_Scan_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}_Bond{max_bond}_Step{Timestep}_K{Steps_per_sample}_TEBD{tebd_order}.pdf'
+os.makedirs(f'TN_Sim_Scan_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}', exist_ok=True)
+Output_Base = f'TN_Sim_Scan_L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}/Bond{max_bond}_Step{Timestep}_K{Steps_per_sample}_TEBD{tebd_order}'
+Output_Path = Output_Base + '.pdf'
+Data_Path = Output_Base + '.npz'
+
+def save_data(Scan_Results):
+    """Overwrite the raw data file with all completed J runs. Arrays are indexed [J, time, site] in the order of the J array."""
+    J, times, occupation, magnetization, truncation_error, trotter_error, run_time = (np.array(column) for column in zip(*Scan_Results))
+    tmp_path = Data_Path + '.tmp'
+    with open(tmp_path, 'wb') as f: # Pass a file handle as np.savez would otherwise append .npz to the temp name
+        np.savez(f, J=J, times=times[0], occupation=occupation, magnetization=magnetization, truncation_error=truncation_error, trotter_error=trotter_error, run_time=run_time,
+                 L=Number_of_Bosonic_Modes, N=Number_of_Fock_States, D=Displacement_Coefficent, g=Spin_Boson_Interaction_Coefficent,
+                 Total_time=Total_time, Timestep=Timestep, Steps_per_sample=Steps_per_sample, max_bond=max_bond, tebd_order=tebd_order)
+    os.replace(tmp_path, Data_Path)
 
 def save_results(Scan_Results):
     """Plot all completed J runs and overwrite the output PDF (written to a temp file first so an interrupted save never corrupts the last good PDF)."""
     fig, axes = plt.subplots(len(Scan_Results), 2, figsize=(11, 3.5*len(Scan_Results)), squeeze=False, layout="constrained")
     colors = plt.cm.viridis(np.linspace(0.1, 0.9, Number_of_Bosonic_Modes))
-    for row, (J, times, occupation, magnetization, truncation_error, trotter_error) in enumerate(Scan_Results):
+    for row, (J, times, occupation, magnetization, truncation_error, trotter_error, run_time) in enumerate(Scan_Results):
         ax_occ, ax_mag = axes[row]
         for j in range(Number_of_Bosonic_Modes):
             ax_occ.plot(times, occupation[:, j], color=colors[j], lw=1.8, label=f"site {j}")
             ax_mag.plot(times, magnetization[:, j], color=colors[j], lw=1.8)
-        ax_occ.set_xlabel("t"); ax_occ.set_ylabel("<n_j>"); ax_occ.set_title(f"J={J}, Boson occupation", fontsize=10)
+        ax_occ.set_xlabel("t"); ax_occ.set_ylabel("<n_j>"); ax_occ.set_title(f"J={J}, Boson occupation (run time {run_time:.1f}s)", fontsize=10)
         ax_mag.set_xlabel("t"); ax_mag.set_ylabel("<sz_j>"); ax_mag.set_title("Spin magnetization")
     axes[0, 0].legend(fontsize=7, ncol=2)
     fig.suptitle(f"L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}_Bond{max_bond}_Step{Timestep}_K{Steps_per_sample}_TEBD{tebd_order}")
@@ -76,7 +89,8 @@ if __name__ == '__main__':
         for future in as_completed(futures):
             J, times, occupation, magnetization, truncation_error, trotter_error, tn_time = future.result()
             print(f"J={J}: TEBD (max_bond={max_bond}) done in {tn_time:.2f}s, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}", flush=True)
-            Scan_Results.append((J, times, occupation, magnetization, truncation_error, trotter_error))
+            Scan_Results.append((J, times, occupation, magnetization, truncation_error, trotter_error, tn_time))
             Scan_Results.sort(key=lambda result: result[0]) # Runs finish out of order, keep plots ordered by J
             save_results(Scan_Results)
-            print(f'Saved {Output_Path}', flush=True)
+            save_data(Scan_Results)
+            print(f'Saved {Output_Path} and {Data_Path}', flush=True)

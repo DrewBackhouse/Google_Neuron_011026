@@ -1,6 +1,8 @@
 import heapq
 import numpy as np
 import cirq
+import cirq_google
+import qsimcirq
 import networkx as nx
 import matplotlib.pyplot as plt
 from qutip import about, basis, tensor, destroy, mcsolve, mesolve, expect, qeye, sigmax, sigmay, sigmaz, fock, wigner, coherent
@@ -124,6 +126,22 @@ def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coeffice
 
 #---CIRQ---#
 
+def NoiseModel(Noise):
+    if Noise == True:
+        processor_id = "willow_pink"
+        noise_props = cirq_google.engine.load_device_noise_properties(processor_id)
+        noise_model = cirq_google.NoiseModelFromGoogleNoiseProperties(noise_props)
+        qsim_options = qsimcirq.QSimOptions(cpu_threads=4, max_fused_gate_size=3)
+        sim = qsimcirq.QSimSimulator(qsim_options, noise=noise_model)
+        device = cirq_google.engine.create_device_from_processor_id(processor_id)
+        cal = cirq_google.engine.load_median_device_calibration(processor_id)
+        sim_processor = cirq_google.engine.SimulatedLocalProcessor(processor_id=processor_id, sampler=sim, device=device, calibrations={cal.timestamp // 1000: cal})
+        sim_engine = cirq_google.engine.SimulatedLocalEngine([sim_processor])
+        simulator = sim_engine.get_sampler(processor_id)
+    else:
+        simulator = cirq.Simulator()
+    return simulator, device, cal, noise_props
+
 
 def TrotterStepCRZ(Number_of_Fock_States, Number_of_Bosonic_Modes, Time, Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent):
     qubits = cirq.LineQubit.range(Number_of_Bosonic_Modes * (Number_of_Fock_States+1))
@@ -202,27 +220,27 @@ def _MergeAndStratify(circuit):
     return cirq.drop_empty_moments(circuit)
 
 def CircuitSimulation(simulator, circuit, Number_of_Shots, Pauli_Twirling, Twirl_Instances, qubits):
-    circuit = cirq.optimize_for_target_gateset(circuit, gateset=cirq.CZTargetGateset())  # compile to CZ first (merges initial X too)
-    circuit = cirq.stratified_circuit(circuit, categories=_STRATIFY_CATEGORIES)  # CZ-only moments so the gauge transformer can act on them
+    Target_Gateset_Circuit = cirq.optimize_for_target_gateset(circuit, gateset=cirq.CZTargetGateset())  # compile to CZ first (merges initial X too)
+    Stratified_Circuit = _MergeAndStratify(Target_Gateset_Circuit)
+    Stratified_Circuit_Diagram = str(Stratified_Circuit.to_text_diagram(qubit_order=qubits))
     if Pauli_Twirling == True:
-        optimised_circuits = [_MergeAndStratify(cirq.transformers.CPhaseGaugeTransformerMM()(circuit)) for _ in range(Twirl_Instances)]
-        results = simulator.run_batch(optimised_circuits, repetitions=Number_of_Shots//Twirl_Instances)
+        Twirled_circuits = [cirq.transformers.CPhaseGaugeTransformerMM()(Stratified_Circuit) for _ in range(Twirl_Instances)]
+        Twirled_Circuit_Diagram = str(Twirled_circuits[0].to_text_diagram(qubit_order=qubits))
+        Twirled_Stratified_Circuits = [_MergeAndStratify(Twirled_circuits[i]) for i in range(Twirl_Instances)]
+        Twirled_Stratified_Circuit_Diagram = str(Twirled_Stratified_Circuits[0].to_text_diagram(qubit_order=qubits))
+        results = simulator.run_batch(Twirled_Stratified_Circuits, repetitions=Number_of_Shots//Twirl_Instances)
         Full_Results = np.concatenate([res[0].measurements['m'] for res in results])
-        optimised_circuit = optimised_circuits[0]
+        Circuit_Diagrams = [Stratified_Circuit_Diagram, Twirled_Circuit_Diagram, Twirled_Stratified_Circuit_Diagram]
     else:
-        optimised_circuit = _MergeAndStratify(circuit)
-        Full_Results = simulator.run(optimised_circuit, repetitions=Number_of_Shots).measurements['m']
-    return Full_Results, optimised_circuit
+        Full_Results = simulator.run(Stratified_Circuit, repetitions=Number_of_Shots).measurements['m']
+        Circuit_Diagrams = [Stratified_Circuit_Diagram]
+    return Full_Results, Circuit_Diagrams
 
 def UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Modes):
     Boson_Results = Full_Results[:, :Number_of_Bosonic_Modes*Number_of_Fock_States].reshape(-1, Number_of_Bosonic_Modes, Number_of_Fock_States)     # (shots, modes, Fock states)
     Unary_Mask = np.all(Boson_Results.sum(axis=2) == 1, axis=1)          # True if every register has exactly one qubit in |1>
     Full_Results_Postselected = Full_Results[Unary_Mask]
     return Full_Results_Postselected
-
-def PauliTwirling(circuit, num_instances):
-    circuits = [cirq.transformers.CPhaseGaugeTransformerMM()(circuit) for _ in range(num_instances)]
-    return circuits
 
 #---Qubit Mapping---#
 

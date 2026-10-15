@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from qutip import basis, tensor, mesolve, expect, fock
 
-from Functions import QutipHamiltonian, QutipSim, TrotterStepCRX, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection, CircuitSimulation
+from Functions import QutipHamiltonian, QutipSim, TrotterStepCRX, MapQubitsToDevice, CheckQubitMapping, PlotQubitEmbedding, UnaryPostSelection, CircuitSimulation, NoiseModel
 
 #To Do: Print each unique circuit to see what is happening, maybe also a 2 timestep circuit to check overlap merging etc. Run twirled vs untwirled. Figure out how to post-process twirled results. Look into REM. Put more things into functions and seperate functions into diffrent scripts by modeule dependency.
 
 #---Model Parameters---#
 
-Number_of_Fock_States = 6
+Number_of_Fock_States = 8
 Number_of_Bosonic_Modes = 1
 Displacement_Coefficent = 1
 Spin_Interaction_Coefficent = 0.1
@@ -24,12 +24,12 @@ Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_St
 
 #---Simulation Parameters---#
 
-Total_time = 5
-Timesteps_List = list(range(1, 2))
-Number_of_Shots = 10
+Total_time = 25
+Timesteps_List = list(range(100, 101))
+Number_of_Shots = 2000
 Noise = True
-Pauli_Twirling = True
-Twirl_Instances = 2
+Pauli_Twirling = False
+Twirl_Instances = 20
 Simulation_Approval = False
 Automatic_Qubit_Mapping = True
 
@@ -41,24 +41,11 @@ Spin_Weights = {'T1': 1.0, 'Tphi': 1.0, 'single_qubit': 1.0, 'readout': 1.0, 'CZ
 
 #---Noise model---#
 
-if Noise == True:
-    processor_id = "willow_pink"
-    noise_props = cirq_google.engine.load_device_noise_properties(processor_id)
-    noise_model = cirq_google.NoiseModelFromGoogleNoiseProperties(noise_props)
-    qsim_options = qsimcirq.QSimOptions(cpu_threads=4, max_fused_gate_size=3)
-    sim = qsimcirq.QSimSimulator(qsim_options, noise=noise_model)
-    device = cirq_google.engine.create_device_from_processor_id(processor_id)
-    cal = cirq_google.engine.load_median_device_calibration(processor_id)
-    sim_processor = cirq_google.engine.SimulatedLocalProcessor(processor_id=processor_id, sampler=sim, device=device, calibrations={cal.timestamp // 1000: cal})
-    sim_engine = cirq_google.engine.SimulatedLocalEngine([sim_processor])
-    simulator = sim_engine.get_sampler(processor_id)
-else:
-    simulator = cirq.Simulator()
+simulator, device, cal, noise_props = NoiseModel(Noise)
 
 #---Trotter circuit and Qubit mapping---#
 
 Trotter_circuit, qubits = TrotterStepCRX(Number_of_Fock_States, Number_of_Bosonic_Modes, Total_time/Timesteps_List[0], Displacement_Coefficent, Spin_Interaction_Coefficent, Spin_Boson_Interaction_Coefficent)
-print(Trotter_circuit)
 Trotter_Diagram = str(Trotter_circuit)
 
 if Noise == True:
@@ -98,6 +85,7 @@ for Timesteps in Timesteps_List:
         qubits = Willow_qubits
     Trotter_circuit = cirq.optimize_for_target_gateset(Trotter_circuit, gateset=cirq.CZTargetGateset())
 
+    # This should be written as a function and paralellised.
     All_Results = []
     Min_Kept = Number_of_Shots
     for i in range(1, Timesteps+1):
@@ -106,10 +94,9 @@ for Timesteps in Timesteps_List:
             circuit.append(cirq.X(qubits[j*Number_of_Fock_States]))
         circuit.append([Trotter_circuit]*i)
         circuit.append(cirq.measure(*qubits, key='m'))
-        Full_Results, optimised_circuit = CircuitSimulation(simulator, circuit, Number_of_Shots, Pauli_Twirling, Twirl_Instances, qubits)
+        Full_Results, Circuit_Diagrams = CircuitSimulation(simulator, circuit, Number_of_Shots, Pauli_Twirling, Twirl_Instances, qubits)
         if i == 1 and Timesteps == Timesteps_List[0]:
-                    Full_Circuit_Diagram = str(optimised_circuit.to_text_diagram(qubit_order=qubits))
-        print(Full_Results)
+                    First_Timestep_Circuit_Diagrams = Circuit_Diagrams
         Full_Results_Postselected = UnaryPostSelection(Full_Results, Number_of_Fock_States, Number_of_Bosonic_Modes)
         Min_Kept = min(Min_Kept, len(Full_Results_Postselected))
         Averaged_Results = Full_Results_Postselected.mean(axis=0)
@@ -144,20 +131,22 @@ for r, (Timesteps, Time, Time_Data, All_Results) in enumerate(Scan_Results):
 axes[-1,0].set_xlabel('Time')
 axes[-1,1].set_xlabel('Time')
 Fig_Height = 2.8*Rows     # inches; keep the suptitle a fixed distance from the top regardless of row count
-fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Total time={Total_time}, Shots={Number_of_Shots}, Noise = {Noise}, postselection', y=1 - 0.15/Fig_Height, va='top')
+fig.suptitle(f'N={Number_of_Fock_States}, L={Number_of_Bosonic_Modes}, Shots={Number_of_Shots}, Noise = {Noise}, Pauli Twirling = {Pauli_Twirling}, Twirl Instances ={Twirl_Instances}', y=1 - 0.15/Fig_Height, va='top')
 fig.tight_layout(rect=(0, 0, 1, 1 - 0.6/Fig_Height))
 # fig.savefig('Timestep_Scan.png', dpi=80)
 
-Circuit_Text = (f'Trotter step circuit (Trotter time={Total_time/Timesteps_List[0]:.3f})\n\n{Trotter_Diagram}\n\n\n'
-                f'Full circuit, first timestep (Timesteps={Timesteps_List[0]})\n\n{Full_Circuit_Diagram}')
+Diagram_Labels = ['Compiled to CZ, merged + stratified', 'Pauli twirled (instance 0)', 'Pauli twirled, merged + stratified (instance 0)']
+Circuit_Text = f'Trotter step circuit (Trotter time={Total_time/Timesteps_List[0]:.3f})\n\n{Trotter_Diagram}'
+for Label, Diagram in zip(Diagram_Labels, First_Timestep_Circuit_Diagrams):   # zip stops after 1 entry when twirling is off
+    Circuit_Text += f'\n\n\n{Label}, first timestep (Timesteps={Timesteps_List[0]})\n\n{Diagram}'
 Lines = Circuit_Text.split('\n')
 Font_Size = 6
 Circuit_fig = plt.figure(figsize=(max(8, 0.6*Font_Size/72*max(len(l) for l in Lines) + 1), max(4, 1.2*Font_Size/72*len(Lines) + 1)))   # size page to fit the text so wide circuits aren't clipped
 Circuit_fig.text(0.5/Circuit_fig.get_figwidth(), 1 - 0.5/Circuit_fig.get_figheight(), Circuit_Text, family='monospace', fontsize=Font_Size, va='top', ha='left')
 
-with PdfPages(f'Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}_Twirl{Pauli_Twirling}.pdf') as pdf:
+with PdfPages(f'Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}_Twirl{Pauli_Twirling}_Twirl_Instances{Twirl_Instances}.pdf') as pdf:
     if Noise == True:
         pdf.savefig(Mapping_fig)
     pdf.savefig(Circuit_fig)
     pdf.savefig(fig)
-print(f'Saved Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}_Twirl{Pauli_Twirling}.pdf')
+print(f'Saved Output/CRXTimestepScan_N{Number_of_Fock_States}_T{Timesteps_List[0]}-{Timesteps_List[-1]}_Noise{Noise}_Twirl{Pauli_Twirling}_Twirl_Instances{Twirl_Instances}.pdf')

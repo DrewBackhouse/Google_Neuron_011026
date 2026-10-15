@@ -1,0 +1,33 @@
+Task 10: max_bond=256 timestep=0.05 tebd_order=2 on erc-hpc-comp186
+Running 10 J values on 10 workers: max_bond=256, Timestep=0.05, tebd_order=2, steps_per_sample=10
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+/users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/N7/TN_Sim_Scan.py", line 90, in <module>
+    J, times, occupation, magnetization, truncation_error, trotter_error, tn_time = future.result()
+                                                                                    ^^^^^^^^^^^^^^^
+  File "/software/spackages_v0_21_prod/apps/linux-ubuntu22.04-zen2/gcc-13.2.0/python-3.11.6-oe7bpykqsieymznu5rprjla46ti6uagh/lib/python3.11/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/software/spackages_v0_21_prod/apps/linux-ubuntu22.04-zen2/gcc-13.2.0/python-3.11.6-oe7bpykqsieymznu5rprjla46ti6uagh/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+concurrent.futures.process.BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.
+[2026-10-14T15:45:57.182] error: Detected 1 oom_kill event in StepId=38018800.batch. Some of the step tasks have been OOM Killed.

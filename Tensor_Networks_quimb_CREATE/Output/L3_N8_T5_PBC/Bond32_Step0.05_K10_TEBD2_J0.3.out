@@ -1,0 +1,1 @@
+Running J=0.3: max_bond=32, Timestep=0.05, tebd_order=2, steps_per_sample=10, cyclic=True, saving to /Users/drewbackhouse/Documents/Claude/Neuron circuit 2:10:26/Tensor_Networks_quimb_CREATE/Output/L3_N8_T5_PBC/Bond32_Step0.05_K10_TEBD2_J0.3.npz every 1 samples

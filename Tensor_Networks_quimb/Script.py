@@ -22,6 +22,7 @@ Number_of_Bosonic_Modes = 3
 Displacement_Coefficent = 1
 J_List = np.round(np.arange(0.1, 0.1 + 1e-9, 0.1), 6)
 Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_States -0.5)**0.5 # Value for a full spin flip
+cyclic = True
 
 #---Simulation Parameters---#
 
@@ -44,7 +45,7 @@ Steps_per_sample = round(0.5/Timestep)
 
 #---Output of Results---#
 
-Output_Dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Output', f'L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_J{J_List[0]}-{J_List[-1]}_T{Total_time}') # Relative to this script, not the working directory
+Output_Dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Output', f'L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_J{J_List[0]}-{J_List[-1]}_T{Total_time}' + ('_PBC' if cyclic else '_OBC')) # Relative to this script, not the working directory
 os.makedirs(Output_Dir, exist_ok=True)
 Output_Base = os.path.join(Output_Dir, f'Bond{max_bond}_Step{Timestep}_TEBD{tebd_order}')
 Output_Path = Output_Base + '.pdf'
@@ -69,15 +70,15 @@ if __name__ == '__main__':
     sys.stdout = Tee(sys.__stdout__, Log_File)
     sys.stderr = Tee(sys.__stderr__, Log_File) # Tracebacks also end up in the log
     workers = max(1, min(args.workers, len(J_List)))
-    print(f"Running {len(J_List)} J values on {workers} workers: max_bond={max_bond}, Timestep={Timestep}, tebd_order={tebd_order}, steps_per_sample={Steps_per_sample}", flush=True)
+    print(f"Running {len(J_List)} J values on {workers} workers: max_bond={max_bond}, Timestep={Timestep}, tebd_order={tebd_order}, steps_per_sample={Steps_per_sample}, cyclic={cyclic}", flush=True)
     Scan_Results = []
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(run_J, J, Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, Timestep, tebd_order, Steps_per_sample) for J in J_List]
+        futures = [pool.submit(run_J, J, Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, Timestep, tebd_order, Steps_per_sample, cyclic) for J in J_List]
         for future in as_completed(futures):
             J, times, occupation, magnetization, truncation_error, trotter_error, tn_time = future.result()
             print(f"J={J}: TEBD (max_bond={max_bond}) done in {tn_time:.2f}s, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}", flush=True)
             Scan_Results.append((J, times, occupation, magnetization, truncation_error, trotter_error, tn_time))
             Scan_Results.sort(key=lambda result: result[0]) # Runs finish out of order, keep plots ordered by J
-            save_results(Scan_Results, Output_Path, Number_of_Bosonic_Modes, Number_of_Fock_States, Total_time, Timestep, Steps_per_sample, max_bond, tebd_order)
-            save_data(Scan_Results, Data_Path, Number_of_Bosonic_Modes, Number_of_Fock_States, Total_time, Timestep, Steps_per_sample, max_bond, tebd_order)
+            save_results(Scan_Results, Output_Path, Number_of_Bosonic_Modes, Number_of_Fock_States, Total_time, Timestep, Steps_per_sample, max_bond, tebd_order, cyclic)
+            save_data(Scan_Results, Data_Path, Number_of_Bosonic_Modes, Number_of_Fock_States, Total_time, Timestep, Steps_per_sample, max_bond, tebd_order, cyclic)
             print(f'Saved {Output_Path} and {Data_Path}', flush=True)

@@ -20,3 +20,10 @@ Running 10 J values on 10 workers: max_bond=128, Timestep=0.05, tebd_order=2, st
   warnings.warn(
 /users/k2148668/GoogleQVM/lib/python3.11/site-packages/cotengra/hyperoptimizers/hyper.py:36: UserWarning: Couldn't import `kahypar` - skipping from default hyper optimizer and using basic `labels` method instead. `kahypar` is highly recommended for the best quality contraction paths.
   warnings.warn(
+J=0.1: TEBD (max_bond=128) done in 74437.70s, final truncation error=1.57e-03, Trotter error=9.52e+00
+Saved TN_Sim_Scan_L7_N8_T100/Bond128_Step0.05_K10_TEBD2.pdf and TN_Sim_Scan_L7_N8_T100/Bond128_Step0.05_K10_TEBD2.npz
+J=0.2: TEBD (max_bond=128) done in 81391.91s, final truncation error=2.49e-02, Trotter error=9.53e+00
+Saved TN_Sim_Scan_L7_N8_T100/Bond128_Step0.05_K10_TEBD2.pdf and TN_Sim_Scan_L7_N8_T100/Bond128_Step0.05_K10_TEBD2.npz
+J=0.4: TEBD (max_bond=128) done in 85982.23s, final truncation error=2.38e-01, Trotter error=9.58e+00
+Saved TN_Sim_Scan_L7_N8_T100/Bond128_Step0.05_K10_TEBD2.pdf and TN_Sim_Scan_L7_N8_T100/Bond128_Step0.05_K10_TEBD2.npz
+[2026-10-15T14:48:31.071] error: *** JOB 38018685 ON erc-hpc-comp184 CANCELLED AT 2026-10-15T14:48:31 DUE TO TIME LIMIT ***

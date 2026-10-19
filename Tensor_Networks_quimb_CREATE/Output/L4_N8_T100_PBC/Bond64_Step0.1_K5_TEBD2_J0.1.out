@@ -1,0 +1,1 @@
+Running L=4, J=0.1: max_bond=64, Timestep=0.1, tebd_order=2, steps_per_sample=5, cyclic=True, saving to /cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_quimb_CREATE/Output/L4_N8_T100_PBC/Bond64_Step0.1_K5_TEBD2_J0.1.npz every 1 samples

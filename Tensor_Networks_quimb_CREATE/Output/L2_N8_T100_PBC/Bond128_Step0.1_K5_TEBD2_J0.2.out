@@ -1,0 +1,3 @@
+Running L=2, J=0.2: max_bond=128, Timestep=0.1, tebd_order=2, steps_per_sample=5, cyclic=True, saving to /cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_quimb_CREATE/Output/L2_N8_T100_PBC/Bond128_Step0.1_K5_TEBD2_J0.2.npz every 1 samples
+J=0.2: TEBD (max_bond=128) done in 18.16s, final truncation error=-1.16e-13, Trotter error=6.38e+01
+Saved /cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_quimb_CREATE/Output/L2_N8_T100_PBC/Bond128_Step0.1_K5_TEBD2_J0.2.npz

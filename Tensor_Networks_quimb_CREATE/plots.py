@@ -1,6 +1,6 @@
 # Makes all plots from the .npz files produced by Simulation.py, saving the PDFs next to the data
-# Run with: python plots.py                 (every folder under Output/)
-#      or:  python plots.py Output/L3_N8_T5_PBC
+# Run with: python Tensor_Networks_quimb_CREATE/plots.py                 (every folder under Output/)
+#      or:  Tensor_Networks_quimb_CREATE/plots.py Tensor_Networks_quimb_CREATE/Output/L2_N8_T100_PBC
 # For each folder of .npz files it writes:
 #   Bond{χ}_Step{dt}_K{K}_TEBD{o}.pdf  - occupation and magnetization of every site, one row per J
 #   Convergence_{Run}.pdf              - all (max_bond, timestep) runs overlaid at the middle site, one page per J (only if there is more than one run to compare)

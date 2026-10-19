@@ -1,0 +1,4 @@
+# Installed into TeNPyvenv by setup_venv.sh. These are the newest versions with wheels for Python 3.11 (numpy 2.5 / scipy 1.18 need >= 3.12)
+numpy==2.4.6
+scipy==1.17.1
+physics-tenpy==1.1.1

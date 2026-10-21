@@ -1,0 +1,1 @@
+Running TDVP L=6, J=0.2, init=100000: max_bond=128, Timestep=0.05, tebd_order=2, cbe_expand=None, cbe_expand_0=None, steps_per_sample=10, cyclic=True, saving to /cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_TeNPy_CREATE/Output/L6_N8_S100000_T100_PBC/Bond128_Step0.05_K10_TEBD2_J0.2.npz every 1 samples

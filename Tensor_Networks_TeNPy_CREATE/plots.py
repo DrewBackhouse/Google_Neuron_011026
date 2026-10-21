@@ -5,6 +5,7 @@
 #   Bond{χ}_Step{dt}_K{K}_TEBD{o}[_CBE{e}[-{e0}]].pdf  - occupation and magnetization of every site, one row per J
 #   Convergence_{Run}.pdf                               - all (max_bond, timestep, cbe) runs overlaid at the middle site, one page per J (only if there is more than one run to compare)
 # Legacy .npz files holding a whole J scan (e.g. Output/L7_N8_T100/Corrected) are also read
+# Add --merge-sites to merge sites that sholuld be idential due to the symmetry of the initial state.
 
 import os
 import glob
@@ -19,11 +20,30 @@ parser = argparse.ArgumentParser()
 parser.add_argument('path', nargs='?', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Output'), help='Output folder (searched recursively)')
 parser.add_argument('--no-runs', action='store_true', help='Skip the per-run occupation/magnetization plots')
 parser.add_argument('--no-convergence', action='store_true', help='Skip the convergence plots')
+parser.add_argument('--merge-sites', action='store_true', help='In the per-run plots, draw sites related by a symmetry of the lattice and initial spins as one line (e.g. S100000 PBC: 1=5, 2=4)')
 args = parser.parse_args()
 
 CHI_COLORS = {32: '#2a78d6', 64: '#eb6834', 128: '#1baf7a', 256: '#eda100'}   # Categorical slots 1-4, colour follows bond dimension
 DT_STYLES = {0.1: (0, (2, 2)), 0.05: '-', 0.025: (0, (6, 2))}                  # Line style follows timestep
 TRUNC_LIMIT = 1e-2 # Times after the best run's cumulative truncation error passes this are shaded
+
+def site_style(j, L):
+    """Site 0 solid, later sites progressively shorter dashes, so sites lying on top of each other stay visible"""
+    if j == 0:
+        ls = '-'
+    else:
+        d = np.geomspace(10, 1.5, max(L - 1, 1))[j - 1]
+        ls = (0, (d, 0.6*d))
+    return dict(color=plt.cm.tab10(j % 10), lw=1.8, linestyle=ls)
+
+def site_groups(L, init, cyclic):
+    """Sites grouped into classes that are equivalent under the symmetries of the chain (rotations and reflections with PBC, the reflection with OBC)
+    that leave the initial spins unchanged. The Hamiltonian is the same on every site and bond, so sites in a class have identical dynamics"""
+    init = (init or '').ljust(L, '0') # Runs from before init was configurable started all up
+    maps = [lambda j, s=s, k=k: (s*j + k) % L for s in (1, -1) for k in range(L)] if cyclic else [lambda j: j, lambda j: L - 1 - j]
+    maps = [g for g in maps if all(init[g(j)] == init[j] for j in range(L))]
+    groups = {tuple(sorted({g(j) for g in maps})) for j in range(L)}
+    return sorted(groups)
 
 #---Loading---#
 
@@ -40,11 +60,13 @@ def load_folder(Run_Dir):
     for f in sorted(glob.glob(os.path.join(Run_Dir, '*.npz'))):
         d = np.load(f, allow_pickle=False)
         key = (int(d['max_bond']), float(d['Timestep']), int(d['tebd_order']), cbe_value(d, 'cbe_expand'), cbe_value(d, 'cbe_expand_0'))
-        info.update(L=int(d['L']), N=int(d['N']), Total_time=d['Total_time'].item(), Steps_per_sample=int(d['Steps_per_sample']), cyclic=bool(d['cyclic']) if 'cyclic' in d else False)
+        info.update(L=int(d['L']), N=int(d['N']), Total_time=d['Total_time'].item(), Steps_per_sample=int(d['Steps_per_sample']), cyclic=bool(d['cyclic']) if 'cyclic' in d else False,
+                    init=str(d['init']) if 'init' in d else None) # Initial spin state, missing in runs from before it was configurable
         if d['J'].ndim == 0: # One J per file, possibly still running / crashed
             n = int(d['n_done'])
             runs.setdefault(key, {})[round(float(d['J']), 6)] = dict(times=d['times'][:n], occupation=d['occupation'][:n], magnetization=d['magnetization'][:n],
-                                                                     truncation_error=d['truncation_error'][:n], run_time=float(d['run_time']), completed=bool(d['completed']))
+                                                                     truncation_error=d['truncation_error'][:n], run_time=float(d['run_time']), completed=bool(d['completed']),
+                                                                     peak_memory_MB=float(d['peak_memory_MB']) if 'peak_memory_MB' in d else None) # Missing in runs from before it was recorded
         else: # Legacy file holding a whole J scan, arrays indexed [J, time, site]
             for i, J in enumerate(d['J']):
                 runs.setdefault(key, {})[round(float(J), 6)] = dict(times=d['times'], occupation=d['occupation'][i], magnetization=d['magnetization'][i],
@@ -63,21 +85,25 @@ def save_pdf(figs, path):
 
 def plot_runs(Run_Dir, runs, info):
     L = info['L']
-    colors = plt.cm.viridis(np.linspace(0.1, 0.9, L))
+    groups = site_groups(L, info['init'], info['cyclic']) if args.merge_sites else [(j,) for j in range(L)]
     for (max_bond, Timestep, tebd_order, cbe, cbe0), by_J in sorted(runs.items(), key=lambda kv: str(kv[0])): # str as None can't be compared with floats
         K = round(0.5/Timestep)
         fig, axes = plt.subplots(len(by_J), 2, figsize=(11, 3.5*len(by_J)), squeeze=False, layout="constrained")
         for row, J in enumerate(sorted(by_J)):
             r = by_J[J]
             ax_occ, ax_mag = axes[row]
-            for j in range(L):
-                ax_occ.plot(r['times'], r['occupation'][:, j], color=colors[j], lw=1.8, label=f"site {j}")
-                ax_mag.plot(r['times'], r['magnetization'][:, j], color=colors[j], lw=1.8)
+            for i, g in enumerate(groups):
+                g = list(g)
+                label = f"site {g[0]}" if len(g) == 1 else f"sites {','.join(map(str, g))}"
+                ax_occ.plot(r['times'], r['occupation'][:, g].mean(axis=1), label=label, **site_style(i, len(groups))) # Mean over the class, equal up to numerical error
+                ax_mag.plot(r['times'], r['magnetization'][:, g].mean(axis=1), **site_style(i, len(groups)))
             status = f"run time {r['run_time']:.1f}s" if r['completed'] else f"incomplete, t ≤ {r['times'][-1]:g}, {r['run_time']:.1f}s so far"
+            if r.get('peak_memory_MB') is not None:
+                status += f", {r['peak_memory_MB']:.0f} MB"
             ax_occ.set_xlabel("t"); ax_occ.set_ylabel("<n_j>"); ax_occ.set_title(f"J={J}, Boson occupation ({status})", fontsize=10)
             ax_mag.set_xlabel("t"); ax_mag.set_ylabel("<sz_j>"); ax_mag.set_title("Spin magnetization")
         axes[0, 0].legend(fontsize=7, ncol=2)
-        fig.suptitle(f"L{L}_N{info['N']}_T{info['Total_time']}_Bond{max_bond}_Step{Timestep}_K{K}_TEBD{tebd_order}{cbe_tag(cbe, cbe0)}_{'PBC' if info['cyclic'] else 'OBC'}")
+        fig.suptitle(f"L{L}_N{info['N']}" + ('' if info['init'] is None else f"_S{info['init']}") + f"_T{info['Total_time']}_Bond{max_bond}_Step{Timestep}_K{K}_TEBD{tebd_order}{cbe_tag(cbe, cbe0)}_{'PBC' if info['cyclic'] else 'OBC'}")
         save_pdf([fig], os.path.join(Run_Dir, f'Bond{max_bond}_Step{Timestep}_K{K}_TEBD{tebd_order}{cbe_tag(cbe, cbe0)}.pdf'))
 
 #---Convergence plots---#

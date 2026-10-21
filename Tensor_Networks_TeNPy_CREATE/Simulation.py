@@ -9,7 +9,7 @@ import os
 import sys
 import argparse
 import numpy as np
-from Functions import TNSim
+from Functions import TNSim, peak_memory_mb
 
 #---Model Parameters---#
 
@@ -19,6 +19,7 @@ Displacement_Coefficent = 1
 Spin_Interaction_Coefficent = 0.1 # J
 Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_States -0.5)**0.5 # Value for a full spin flip
 cyclic = True
+Initial_Spin_State = '0' # 0 = spin up, 1 = spin down, one per site. Padded with 0 to L if shorter, e.g. '0' all up, '0101' Neel for L=4, '001' gives 0010 for L=4
 
 #---Simulation Parameters---#
 
@@ -33,7 +34,9 @@ cbe_expand_0 = None # QR-TEBD expansion rate at bond dimension 1, None uses cbe_
 # Bash script input
 parser = argparse.ArgumentParser()
 parser.add_argument('--L', type=int, default=Number_of_Bosonic_Modes, help='Number of bosonic modes (sites)')
+parser.add_argument('--N', type=int, default=Number_of_Fock_States, help='Number of Fock states per bosonic mode')
 parser.add_argument('--J', type=float, default=Spin_Interaction_Coefficent, help='Spin-spin interaction coefficient')
+parser.add_argument('--T', type=float, default=Total_time, help='Total evolution time')
 parser.add_argument('--max_bond', type=int, default=max_bond)
 parser.add_argument('--timestep', type=float, default=Timestep)
 parser.add_argument('--tebd_order', type=int, default=tebd_order, choices=[2, 4])
@@ -41,9 +44,15 @@ parser.add_argument('--cbe_expand', type=float, default=cbe_expand, help='QR-TEB
 parser.add_argument('--cbe_expand_0', type=float, default=cbe_expand_0, help='QR-TEBD expansion rate at bond dimension 1 (left out: cbe_expand throughout)')
 parser.add_argument('--save_every', type=int, default=1, help='Save the .npz every this many measured samples')
 parser.add_argument('--bc', choices=['pbc', 'obc'], default=('pbc' if cyclic else 'obc'), help='Periodic or open boundary conditions')
+parser.add_argument('--init', type=str, default=Initial_Spin_State, help='Initial spins, 0 = up, 1 = down, padded with 0 to L (e.g. 001 gives 0010 for L=4)')
 args = parser.parse_args()
-Number_of_Bosonic_Modes, J, max_bond, Timestep, tebd_order, cbe_expand, cbe_expand_0 = args.L, args.J, args.max_bond, args.timestep, args.tebd_order, args.cbe_expand, args.cbe_expand_0
+Number_of_Bosonic_Modes, Number_of_Fock_States, J, max_bond, Timestep, tebd_order, cbe_expand, cbe_expand_0 = args.L, args.N, args.J, args.max_bond, args.timestep, args.tebd_order, args.cbe_expand, args.cbe_expand_0
+Spin_Boson_Interaction_Coefficent = Displacement_Coefficent * (Number_of_Fock_States -0.5)**0.5 # Recomputed as it depends on N
+Total_time = int(args.T) if args.T.is_integer() else args.T # int keeps the folder name as T200 rather than T200.0
 cyclic = args.bc == 'pbc'
+if set(args.init) - {'0', '1'} or len(args.init) > Number_of_Bosonic_Modes:
+    parser.error(f"--init must be a string of 0s and 1s of at most L={Number_of_Bosonic_Modes} characters, got '{args.init}'")
+Initial_Spin_State = args.init.ljust(Number_of_Bosonic_Modes, '0')
 
 Steps_per_sample = round(0.5/Timestep)
 Algorithm = 'TDVP' if (cyclic and Number_of_Bosonic_Modes > 2) else 'QR-TEBD' # Must match the choice in TNSim
@@ -53,14 +62,14 @@ CBE_Tag = '' if cbe_expand is None else f'_CBE{cbe_expand}' + ('' if cbe_expand_
 
 #---Output of Results---#
 
-Output_Dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Output', f'L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_T{Total_time}' + ('_PBC' if cyclic else '_OBC')) # Relative to this script, not the working directory
+Output_Dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Output', f'L{Number_of_Bosonic_Modes}_N{Number_of_Fock_States}_S{Initial_Spin_State}_T{Total_time}' + ('_PBC' if cyclic else '_OBC')) # Relative to this script, not the working directory
 os.makedirs(Output_Dir, exist_ok=True)
 Output_Base = os.path.join(Output_Dir, f'Bond{max_bond}_Step{Timestep}_K{Steps_per_sample}_TEBD{tebd_order}{CBE_Tag}_J{J}')
 Data_Path = Output_Base + '.npz'
 Log_Path = Output_Base + '.out'
 
 Metadata = dict(J=J, L=Number_of_Bosonic_Modes, N=Number_of_Fock_States, D=Displacement_Coefficent, Spin_Boson_Interaction_Coefficent=Spin_Boson_Interaction_Coefficent,
-                Total_time=Total_time, Timestep=Timestep, Steps_per_sample=Steps_per_sample, max_bond=max_bond, tebd_order=tebd_order, cyclic=cyclic, algorithm=Algorithm,
+                Total_time=Total_time, Timestep=Timestep, Steps_per_sample=Steps_per_sample, max_bond=max_bond, tebd_order=tebd_order, cyclic=cyclic, algorithm=Algorithm, init=Initial_Spin_State,
                 cbe_expand=np.nan if cbe_expand is None else cbe_expand, cbe_expand_0=np.nan if cbe_expand_0 is None else cbe_expand_0) # NaN as np.savez can't store None
 
 class Tee:
@@ -80,8 +89,8 @@ if __name__ == '__main__':
     Log_File = open(Log_Path, 'w')
     sys.stdout = Tee(sys.__stdout__, Log_File)
     sys.stderr = Tee(sys.__stderr__, Log_File) # Tracebacks also end up in the log
-    print(f"Running {Algorithm} L={Number_of_Bosonic_Modes}, J={J}: max_bond={max_bond}, Timestep={Timestep}, tebd_order={tebd_order}, cbe_expand={cbe_expand}, cbe_expand_0={cbe_expand_0}, steps_per_sample={Steps_per_sample}, cyclic={cyclic}, saving to {Data_Path} every {args.save_every} samples", flush=True)
+    print(f"Running {Algorithm} L={Number_of_Bosonic_Modes}, N={Number_of_Fock_States}, J={J}, init={Initial_Spin_State}: max_bond={max_bond}, Timestep={Timestep}, tebd_order={tebd_order}, cbe_expand={cbe_expand}, cbe_expand_0={cbe_expand_0}, steps_per_sample={Steps_per_sample}, cyclic={cyclic}, saving to {Data_Path} every {args.save_every} samples", flush=True)
     times, occupation, magnetization, truncation_error, trotter_error, tn_time = TNSim(Number_of_Bosonic_Modes, Number_of_Fock_States, Displacement_Coefficent, J, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, Timestep, tebd_order, Steps_per_sample, cyclic,
-                                                                                      data_path=Data_Path, cbe_expand=(0.1 if cbe_expand is None else cbe_expand), cbe_expand_0=cbe_expand_0, metadata=Metadata, save_every=args.save_every)
-    print(f"J={J}: {Algorithm} (max_bond={max_bond}) done in {tn_time:.2f}s, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}", flush=True)
+                                                                                      data_path=Data_Path, cbe_expand=(0.1 if cbe_expand is None else cbe_expand), cbe_expand_0=cbe_expand_0, metadata=Metadata, save_every=args.save_every, initial_state=Initial_Spin_State)
+    print(f"J={J}: {Algorithm} (max_bond={max_bond}) done in {tn_time:.2f}s, peak memory {peak_memory_mb():.0f} MB, final truncation error={truncation_error[-1]:.2e}, Trotter error={trotter_error[-1]:.2e}", flush=True)
     print(f'Saved {Data_Path}', flush=True)

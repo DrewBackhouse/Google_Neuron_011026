@@ -7,7 +7,9 @@ from tenpy.models.model import CouplingMPOModel, NearestNeighborModel
 from tenpy.algorithms.tebd import QRBasedTEBDEngine
 from tenpy.algorithms.tdvp import TwoSiteTDVPEngine
 import os
+import sys
 import time
+import resource
 
 
 def TNHamiltonian(N, D, Spin_Boson_Interaction_Coefficent):
@@ -55,7 +57,7 @@ class SpinBosonChainNN(SpinBosonChain, NearestNeighborModel): # Bond Hamiltonian
     pass
 
 
-def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, dt, tebd_order, steps_per_sample, cyclic=False, data_path=None, metadata=None, save_every=1, cbe_expand=0.1, cbe_expand_0=None, svd_min=1e-10):
+def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coefficent, Total_time, max_bond, dt, tebd_order, steps_per_sample, cyclic=False, data_path=None, metadata=None, save_every=1, cbe_expand=0.1, cbe_expand_0=None, svd_min=1e-10, initial_state=None):
     t0 = time.time()
     n_samples = int(Total_time / (steps_per_sample * dt) + 1e-9) + 1
     times = np.arange(n_samples) * steps_per_sample * dt
@@ -63,7 +65,7 @@ def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coeffice
     use_tdvp = cyclic and L > 2 # TEBD needs nearest neighbour bonds, so the wrap-around bond is handled with TDVP on the periodic MPO. L=2 already has its only bond
     model_params = dict(L=L, N=N, D=D, J=spin_interaction_coefficient, g=Spin_Boson_Interaction_Coefficent, cyclic=use_tdvp)
     model = SpinBosonChain(model_params) if use_tdvp else SpinBosonChainNN(model_params)
-    psi = MPS.from_product_state(model.lat.mps_sites(), [0] * L, bc="finite") # Spin up, boson vacuum
+    psi = MPS.from_product_state(model.lat.mps_sites(), [int(s) * N for s in (initial_state or '0' * L)], bc="finite") # '0' = spin up (index 0), '1' = spin down (index N), boson vacuum
 
     trunc_params = dict(svd_min=svd_min, chi_max=(max_bond if max_bond is not None else (2 * N) ** (L // 2)))
     if use_tdvp:
@@ -92,9 +94,12 @@ def TNSim(L, N, D, spin_interaction_coefficient, Spin_Boson_Interaction_Coeffice
 
     return times, occupation, magnetization, truncation_error, trotter_error, time.time() - t0
 
+def peak_memory_mb(): # Peak resident memory of this process so far, ru_maxrss is in KB on Linux and bytes on macOS
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024**2 if sys.platform == 'darwin' else 1024)
+
 def save_data(Data_Path, times, occupation, magnetization, truncation_error, trotter_error, n_done, run_time, metadata):
     tmp_path = Data_Path + '.tmp'
     with open(tmp_path, 'wb') as f: # Pass a file handle as np.savez would otherwise append .npz to the temp name
         np.savez(f, times=times, occupation=occupation, magnetization=magnetization, truncation_error=truncation_error, trotter_error=trotter_error,
-                 n_done=n_done, completed=(n_done == len(times)), run_time=run_time, **metadata)
+                 n_done=n_done, completed=(n_done == len(times)), run_time=run_time, peak_memory_MB=peak_memory_mb(), **metadata) # Saved every sample, so runs killed by the time limit still record it
     os.replace(tmp_path, Data_Path) # Atomic, so a crash mid-save never corrupts the last good file

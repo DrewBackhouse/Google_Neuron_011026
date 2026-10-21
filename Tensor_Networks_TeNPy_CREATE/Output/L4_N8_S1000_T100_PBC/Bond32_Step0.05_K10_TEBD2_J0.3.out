@@ -1,0 +1,5 @@
+Running TDVP L=4, J=0.3, init=1000: max_bond=32, Timestep=0.05, tebd_order=2, cbe_expand=None, cbe_expand_0=None, steps_per_sample=10, cyclic=True, saving to /cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_TeNPy_CREATE/Output/L4_N8_S1000_T100_PBC/Bond32_Step0.05_K10_TEBD2_J0.3.npz every 1 samples
+/cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_TeNPy_CREATE/TeNPyvenv/lib/python3.11/site-packages/tenpy/networks/mps.py:1629: UserWarning: unit_cell_width is a new argument for MPS and similar classes. It is optional for now, but will become mandatory in a future release. The default value (unit_cell_width=len(sites)) is correct, iff the lattice is a Chain. For other lattices, it is incorrect. It is used for dipolar charges and correlation_function2.
+  super().__init__(sites, bc, unit_cell_width)
+J=0.3: TDVP (max_bond=32) done in 1800.54s, peak memory 137 MB, final truncation error=4.50e-02, Trotter error=0.00e+00
+Saved /cephfs/volumes/hpc_home/k2148668/dd0deea3-6c25-43f3-9ab1-6d1a4c2cecde/Tensor_Networks_TeNPy_CREATE/Output/L4_N8_S1000_T100_PBC/Bond32_Step0.05_K10_TEBD2_J0.3.npz

@@ -1,9 +1,9 @@
 # Makes all plots from the .npz files produced by Simulation.py, saving the PDFs next to the data
 # Run with: python Tensor_Networks_TeNPy_CREATE/plots.py                 (every folder under Output/)
-#      or:  Tensor_Networks_TeNPy_CREATE/plots.py Tensor_Networks_TeNPy_CREATE/Output/L2_N8_T100_PBC
+#      or:  python Tensor_Networks_TeNPy_CREATE/plots.py Tensor_Networks_TeNPy_CREATE/Output/L2_N8_T100_PBC
 # For each folder of .npz files it writes:
 #   Bond{χ}_Step{dt}_K{K}_TEBD{o}[_CBE{e}[-{e0}]].pdf  - occupation and magnetization of every site, one row per J
-#   Convergence_{Run}.pdf                               - all (max_bond, timestep, cbe) runs overlaid at the middle site, one page per J (only if there is more than one run to compare)
+#   Convergence_{Run}.pdf                               - all (max_bond, timestep, cbe) runs overlaid for the largest J, one page per site, with % difference from the lowest-resource run (only if there is more than one run to compare)
 # Legacy .npz files holding a whole J scan (e.g. Output/L7_N8_T100/Corrected) are also read
 # Add --merge-sites to merge sites that sholuld be idential due to the symmetry of the initial state.
 
@@ -25,7 +25,7 @@ args = parser.parse_args()
 
 CHI_COLORS = {32: '#2a78d6', 64: '#eb6834', 128: '#1baf7a', 256: '#eda100'}   # Categorical slots 1-4, colour follows bond dimension
 DT_STYLES = {0.1: (0, (2, 2)), 0.05: '-', 0.025: (0, (6, 2))}                  # Line style follows timestep
-TRUNC_LIMIT = 1e-2 # Times after the best run's cumulative truncation error passes this are shaded
+ENV_WINDOW = 10 # The reference's initial peak-to-trough amplitude is measured over t <= this, spans at least one oscillation
 
 def site_style(j, L):
     """Site 0 solid, later sites progressively shorter dashes, so sites lying on top of each other stay visible"""
@@ -65,12 +65,12 @@ def load_folder(Run_Dir):
         if d['J'].ndim == 0: # One J per file, possibly still running / crashed
             n = int(d['n_done'])
             runs.setdefault(key, {})[round(float(d['J']), 6)] = dict(times=d['times'][:n], occupation=d['occupation'][:n], magnetization=d['magnetization'][:n],
-                                                                     truncation_error=d['truncation_error'][:n], run_time=float(d['run_time']), completed=bool(d['completed']),
+                                                                     run_time=float(d['run_time']), completed=bool(d['completed']),
                                                                      peak_memory_MB=float(d['peak_memory_MB']) if 'peak_memory_MB' in d else None) # Missing in runs from before it was recorded
         else: # Legacy file holding a whole J scan, arrays indexed [J, time, site]
             for i, J in enumerate(d['J']):
                 runs.setdefault(key, {})[round(float(J), 6)] = dict(times=d['times'], occupation=d['occupation'][i], magnetization=d['magnetization'][i],
-                                                                    truncation_error=d['truncation_error'][i], run_time=float(d['run_time'][i]), completed=True)
+                                                                    run_time=float(d['run_time'][i]), completed=True)
     return runs, info
 
 def save_pdf(figs, path):
@@ -108,46 +108,49 @@ def plot_runs(Run_Dir, runs, info):
 
 #---Convergence plots---#
 
+def initial_span(x, times):
+    """Peak-to-trough amplitude of x over the first ENV_WINDOW in t, falling back to the whole run (then 1) if that is flat"""
+    return np.ptp(x[times <= ENV_WINDOW]) or np.ptp(x) or 1.0
+
 def plot_convergence(Run_Dir, runs, info):
-    if len(runs) < 2:
+    J = max(J for r in runs.values() for J in r) # Largest J only
+    keys = [k for k in runs if J in runs[k]]
+    if len(keys) < 2:
         return
     Run = os.path.basename(os.path.normpath(Run_Dir))
     if Run == 'Corrected':
         Run = os.path.basename(os.path.dirname(os.path.normpath(Run_Dir))) # Name the plot after the run, not the Corrected/ subfolder
-    SITE = info['L'] // 2 # Middle site
-    multiple_orders = len({k[2] for k in runs}) > 1
-    cbes = sorted({k[3:] for k in runs}, key=str)
+    multiple_orders = len({k[2] for k in keys}) > 1
+    cbes = sorted({k[3:] for k in keys}, key=str)
     CBE_WIDTHS = {c: w for c, w in zip(cbes, np.linspace(1.2, 3, len(cbes)))} # Line width follows (cbe_expand, cbe_expand_0) when more than one is present
+    ref = min(keys, key=lambda k: (k[0], -k[1], k[3] or 0, k[4] or 0, k[2])) # Lowest resource run: lowest bond, then largest timestep, then lowest expansion rate, then lowest order
+    ref_r = runs[ref][J]
 
     figs = []
-    for J in sorted({J for r in runs.values() for J in r}):
-        fig, (ax_n, ax_s, ax_t) = plt.subplots(3, 1, figsize=(10, 9), sharex=True, layout='constrained')
-        # Trust limit from the most accurate run available for this J (largest max_bond, then smallest timestep, then highest order)
-        best = max((k for k in runs if J in runs[k]), key=lambda k: (k[0], -k[1], k[2], k[3] or 0, k[4] or 0)) # ...then largest expansion rate
-        times, trunc = runs[best][J]['times'], runs[best][J]['truncation_error']
-        over = np.where(trunc > TRUNC_LIMIT)[0]
-        t_star = times[over[0]] if len(over) else None
-        t_end = max(runs[k][J]['times'][-1] for k in runs if J in runs[k])
-        for (chi, dt, order, cbe, cbe0), r in sorted(runs.items(), key=lambda kv: str(kv[0])):
-            if J not in r: continue
-            r = r[J]
-            label = f'χ={chi}, dt={dt}' + (f', TEBD{order}' if multiple_orders else '') + (f', cbe={cbe}' + ('' if cbe0 is None else f'-{cbe0}') if len(cbes) > 1 else '') + ('' if r['completed'] else ' (incomplete)')
+    for SITE in range(info['L']):
+        fig, (ax_n, ax_s, ax_dn, ax_ds) = plt.subplots(4, 1, figsize=(10, 11), sharex=True, layout='constrained')
+        spans = {q: initial_span(ref_r[q][:, SITE], ref_r['times']) for q in ('occupation', 'magnetization')}
+        for k in sorted(keys, key=str):
+            chi, dt, order, cbe, cbe0 = k
+            r = runs[k][J]
+            label = f'χ={chi}, dt={dt}' + (f', TEBD{order}' if multiple_orders else '') + (f', cbe={cbe}' + ('' if cbe0 is None else f'-{cbe0}') if len(cbes) > 1 else '') + ('' if r['completed'] else ' (incomplete)') + (' (ref)' if k == ref else '')
             lw = CBE_WIDTHS[(cbe, cbe0)] if len(cbes) > 1 else (1.5 if order == 2 else 2.5)
             kw = dict(color=CHI_COLORS.get(chi, '0.3'), linestyle=DT_STYLES.get(dt, '-'), lw=lw, alpha=1 if order == 2 else 0.6, label=label)
             ax_n.plot(r['times'], r['occupation'][:, SITE], **kw)
             ax_s.plot(r['times'], r['magnetization'][:, SITE], **kw)
-            ax_t.semilogy(r['times'], np.maximum(r['truncation_error'], 1e-8), **kw)
-        for ax in (ax_n, ax_s, ax_t):
-            if t_star is not None:
-                ax.axvspan(t_star, t_end, color='0.5', alpha=0.12, lw=0)
+            m = min(len(r['times']), len(ref_r['times'])) # Same sample spacing in every run, incomplete runs are just shorter
+            for ax, q in ((ax_dn, 'occupation'), (ax_ds, 'magnetization')):
+                ax.plot(r['times'][:m], 100 * (r[q][:m, SITE] - ref_r[q][:m, SITE]) / spans[q], **kw)
+        for ax in (ax_n, ax_s, ax_dn, ax_ds):
             ax.grid(alpha=0.25, lw=0.5)
             for side in ('top', 'right'): ax.spines[side].set_visible(False)
-        ax_t.axhline(TRUNC_LIMIT, color='0.4', lw=0.8, linestyle=':')
-        ax_n.set_ylabel(f'<n_{SITE}>'); ax_s.set_ylabel(f'<sz_{SITE}>'); ax_t.set_ylabel('1 - <psi|psi>'); ax_t.set_xlabel('t')
+        for ax in (ax_dn, ax_ds):
+            ax.axhline(0, color='0.4', lw=0.8, linestyle=':')
+        ax_n.set_ylabel(f'<n_{SITE}>'); ax_s.set_ylabel(f'<sz_{SITE}>')
+        ax_dn.set_ylabel(f'% diff <n_{SITE}> vs ref'); ax_ds.set_ylabel(f'% diff <sz_{SITE}> vs ref'); ax_ds.set_xlabel('t')
         handles, labels = ax_n.get_legend_handles_labels()
         fig.legend(handles, labels, loc='outside lower center', fontsize=8, ncol=4, frameon=False)
-        shade = f'shaded: t > {t_star:g}, where χ={best[0]}, dt={best[1]} truncation > {TRUNC_LIMIT:g}' if t_star is not None else f'truncation < {TRUNC_LIMIT:g} for all t (χ={best[0]}, dt={best[1]})'
-        fig.suptitle(f'{Run}  J={J}  (site {SITE})\n{shade}', fontsize=10)
+        fig.suptitle(f'{Run}  J={J}  site {SITE}\n% diff = 100·(run − ref) / initial peak-to-trough amplitude of ref (t ≤ {ENV_WINDOW:g})', fontsize=10)
         figs.append(fig)
     save_pdf(figs, os.path.join(Run_Dir, f'Convergence_{Run}.pdf'))
 
